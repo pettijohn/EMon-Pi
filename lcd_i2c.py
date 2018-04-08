@@ -40,7 +40,7 @@ class LcdDisplay:
         #Open I2C interface
         #bus = smbus.SMBus(0)  # Rev 1 Pi uses 0
         self.bus = smbus.SMBus(1) # Rev 2 Pi uses 1
-        self.lcd_init()
+        
 
         # Define some device parameters
         self.I2C_ADDR  = 0x27 # I2C device address
@@ -66,7 +66,8 @@ class LcdDisplay:
         self.E_PULSE = 0.0005
         self.E_DELAY = 0.0005
 
-    
+	# Finally, initialize the display
+        self.lcd_init()
 
     def lcd_init(self):
         # Initialise display
@@ -114,10 +115,11 @@ class LcdDisplay:
             self.lcd_byte(ord(message[i]),self.LCD_CHR)
 
     def print(self, messages):
+        self.lcd_string("Hello!!!!", self.LCD_LINE_1)
         if len(messages) != 4:
             raise "Array of length 4 required"
-        for i in range(4):
-            self.lcd_string(str(messages[i]), self.LCD_LINES[i])
+#        for i in range(4):
+#            self.lcd_string(ascii(messages[i]), self.LCD_LINES[i])
 
 #     def main():
 #         # Main program block

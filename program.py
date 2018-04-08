@@ -22,6 +22,8 @@ print('| {0:>6} | {1:>6} | {2:>6} | {3:>6} |'.format(*range(4)))
 print('-' * 37)
 
 display = LcdDisplay()
+display.print(["Hello", "World", "Line3", "LineFour!"])
+time.sleep(5)
 
 # Main loop.
 while True:
@@ -43,4 +45,4 @@ while True:
 
     display.print(voltages)
     # Pause for half a second.
-    time.sleep(0.5)
+    time.sleep(1.0)
