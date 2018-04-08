@@ -1,5 +1,6 @@
 import time
 import Adafruit_ADS1x15
+from lcd_i2c import LcdDisplay
 
 # Create an ADS1115 ADC (16-bit) instance.
 adc = Adafruit_ADS1x15.ADS1115()
@@ -19,6 +20,9 @@ print('Reading ADS1x15 values, press Ctrl-C to quit...')
 # Print nice channel column headers.
 print('| {0:>6} | {1:>6} | {2:>6} | {3:>6} |'.format(*range(4)))
 print('-' * 37)
+
+display = LcdDisplay()
+
 # Main loop.
 while True:
     # Read all the ADC channel values in a list.
@@ -36,5 +40,7 @@ while True:
         # ADC (ADS1015 = 12-bit, ADS1115 = 16-bit).
     # Print the ADC values.
     print('| {0:>+9.6f} | {1:>+9.6f} | {2:>+9.6f} | {3:>+9.6f} |'.format(*voltages))
+
+    display.print(voltages)
     # Pause for half a second.
     time.sleep(0.5)
