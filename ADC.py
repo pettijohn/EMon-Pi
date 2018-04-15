@@ -29,17 +29,30 @@ class ADC:
 
         # Create an ADS1115 ADC (16-bit) instance.
         self.adc = Adafruit_ADS1x15.ADS1115()
+        self.adc.start_adc_difference(0, self.gain)
 
-    def readVoltages(self):
-        # Note you can also pass in an optional data_rate parameter that controls
-        # the ADC conversion time (in samples/second). Each chip has a different
-        # set of allowed data rate values, see datasheet Table 9 config register
-        # DR bit values.
-        #values[i] = adc.read_adc(i, gain=GAIN, data_rate=128)
-        # Each value will be a 12 or 16 bit signed integer value depending on the
-            # ADC (ADS1015 = 12-bit, ADS1115 = 16-bit).
-        values = map(lambda i: self.adc.read_adc(i, gain=self.gain), range(4))
-        return list(map(lambda v: v / 32767.0 * self.vMax, values))
+    def __enter__(self):
+        # support with block
+        return self
 
-    def readDifferential_0_1(self):
-        return self.adc.read_adc_difference(0, self.gain) / 32767.0 * self.vMax
+    def __exit__(self, exc_type, exc_value, traceback):
+        # clean up from with block
+        self.adc.stop_adc()
+
+    def getLastVoltage_01diff(self):
+        return self.adc.get_last_result() / 32767.0 * self.vMax
+
+    # def readVoltagesSingleShot(self):
+    #     # Note you can also pass in an optional data_rate parameter that controls
+    #     # the ADC conversion time (in samples/second). Each chip has a different
+    #     # set of allowed data rate values, see datasheet Table 9 config register
+    #     # DR bit values.
+    #     #values[i] = adc.read_adc(i, gain=GAIN, data_rate=128)
+    #     # Each value will be a 12 or 16 bit signed integer value depending on the
+    #     # ADC (ADS1015 = 12-bit, ADS1115 = 16-bit).
+    #     values = map(lambda i: self.adc.read_adc(i, gain=self.gain), range(4))
+    #     return list(map(lambda v: v / 32767.0 * self.vMax, values))
+
+    # def readDifferential_0_1(self):
+    #     return self.adc.read_adc_difference(0, self.gain) / 32767.0 * self.vMax
+
