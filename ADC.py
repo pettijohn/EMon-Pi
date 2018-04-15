@@ -40,3 +40,6 @@ class ADC:
             # ADC (ADS1015 = 12-bit, ADS1115 = 16-bit).
         values = map(lambda i: self.adc.read_adc(i, gain=self.gain), range(4))
         return list(map(lambda v: v / 32767.0 * self.vMax, values))
+
+    def readDifferential_0_1(self):
+        return self.adc.read_adc_difference(0, self.gain) / 32767.0 * self.vMax
