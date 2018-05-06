@@ -31,17 +31,14 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 #--------------------------------------
+# via https://www.raspberrypi-spy.co.uk/2015/05/using-an-i2c-enabled-lcd-screen-with-the-raspberry-pi/
+# https://bitbucket.org/MattHawkinsUK/rpispy-misc/raw/master/python/lcd_i2c.py
 import smbus
 import time
 
-class LcdDisplay:
+class LcdSerialDisplay:
 
     def __init__(self):
-        #Open I2C interface
-        #bus = smbus.SMBus(0)  # Rev 1 Pi uses 0
-        self.bus = smbus.SMBus(1) # Rev 2 Pi uses 1
-        self.lcd_init()
-
         # Define some device parameters
         self.I2C_ADDR  = 0x27 # I2C device address
         self.LCD_WIDTH = 20   # Maximum characters per line
@@ -53,9 +50,8 @@ class LcdDisplay:
         self.LCD_LINE_1 = 0x80 # LCD RAM address for the 1st line
         self.LCD_LINE_2 = 0xC0 # LCD RAM address for the 2nd line
         self.LCD_LINE_3 = 0x94 # LCD RAM address for the 3rd line
-        self.LCD_LINE_4 = 0xD4 # LCD RAM address for the 4th 
-        # Helper array
-        self.LCD_LINES = [self.LCD_LINE_1, self.LCD_LINE_2, self.LCD_LINE_3, self.LCD_LINE_4]
+        self.LCD_LINE_4 = 0xD4 # LCD RAM address for the 4th line
+        self.LCD_LINES = [self.LCD_LINE_1,self.LCD_LINE_2,self.LCD_LINE_3,self.LCD_LINE_4]
 
         self.LCD_BACKLIGHT  = 0x08  # On
         #self.LCD_BACKLIGHT = 0x00  # Off
@@ -66,17 +62,27 @@ class LcdDisplay:
         self.E_PULSE = 0.0005
         self.E_DELAY = 0.0005
 
-    
+        #Open I2C interface
+        #self.bus = smbus.SMBus(0)  # Rev 1 Pi uses 0
+        self.bus = smbus.SMBus(1) # Rev 2 Pi uses 1
 
-    def lcd_init(self):
+            
         # Initialise display
+        self.lcd_byte(0x33,self.LCD_CMD) # 110011 Initialise
         self.lcd_byte(0x32,self.LCD_CMD) # 110010 Initialise
         self.lcd_byte(0x06,self.LCD_CMD) # 000110 Cursor move direction
         self.lcd_byte(0x0C,self.LCD_CMD) # 001100 Display On,Cursor Off, Blink Off 
         self.lcd_byte(0x28,self.LCD_CMD) # 101000 Data length, number of lines, font size
         self.lcd_byte(0x01,self.LCD_CMD) # 000001 Clear display
-        self.lcd_byte(0x33,self.LCD_CMD) # 110011 Initialise
         time.sleep(self.E_DELAY)
+
+    def __enter__(self):
+        # support with block
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # clean up from with block
+        self.lcd_byte(0x01, self.LCD_CMD)
 
     def lcd_byte(self, bits, mode):
         # Send byte to data pins
@@ -96,14 +102,14 @@ class LcdDisplay:
         self.lcd_toggle_enable(bits_low)
 
     def lcd_toggle_enable(self, bits):
-        # Toggle enable
+        # Toggle self.ENABLE
         time.sleep(self.E_DELAY)
         self.bus.write_byte(self.I2C_ADDR, (bits | self.ENABLE))
         time.sleep(self.E_PULSE)
         self.bus.write_byte(self.I2C_ADDR,(bits & ~self.ENABLE))
         time.sleep(self.E_DELAY)
 
-    def lcd_string(self, message, line):
+    def lcd_string(self, message,line):
         # Send string to display
 
         message = message.ljust(self.LCD_WIDTH," ")
@@ -119,34 +125,30 @@ class LcdDisplay:
         for i in range(4):
             self.lcd_string(str(messages[i]), self.LCD_LINES[i])
 
-#     def main():
-#         # Main program block
+if __name__ == '__main__':
+    # Main program block
 
-#         # Initialise display
-#         display = LcdDisplay()
+    # Initialise display
+    with LcdSerialDisplay() as display:
 
-#         while True:
+        LCD_LINE_1 = 0x80 # LCD RAM address for the 1st line
+        LCD_LINE_2 = 0xC0 # LCD RAM address for the 2nd line
+        LCD_LINE_3 = 0x94 # LCD RAM address for the 3rd line
+        LCD_LINE_4 = 0xD4 # LCD RAM address for the 4th line
+        while True:
 
-#             # Send some test
-#             lcd_string("RPiSpy         <",self.LCD_LINE_1)
-#             lcd_string("I2C LCD        <",self.LCD_LINE_2)
-#             lcd_string("Hello              <", self.LCD_LINE_3)
-#             lcd_string("world!             !", self.LCD_LINE_4)
+            # Send some test
+            # display.lcd_string("RPiSpy         <",LCD_LINE_1)
+            # display.lcd_string("I2C LCD        <",LCD_LINE_2)
+            display.print(["Hello", "world", "tell", "truth"])
 
-#             time.sleep(3)
+            time.sleep(3)
     
-#             # Send some more text
-#             lcd_string(">         RPiSpy",self.LCD_LINE_1)
-#             lcd_string(">        I2C LCD",self.LCD_LINE_2)
+            # Send some more text
+            # display.lcd_string(">         RPiSpy",LCD_LINE_1)
+            # display.lcd_string(">        I2C LCD",LCD_LINE_2)
+            display.print(["Chacha", "loves", "his", "mommy"])
 
-#             time.sleep(3)
+            time.sleep(3)
 
-# if __name__ == '__main__':
-
-#     try:
-#         main()
-#     except KeyboardInterrupt:
-#         pass
-#     finally:
-#         lcd_byte(0x01, self.self.LCD_CMD)
 
