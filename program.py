@@ -1,4 +1,5 @@
 import time
+from datetime import datetime, timedelta
 from lcd_i2c import LcdSerialDisplay
 from ADC import ADC
 
@@ -23,19 +24,26 @@ try:
                 # v0 is a percentage of 5V on a 0-50A current monitor
                 current = (rawVoltage/5.0)*50.0
                 #current = (voltages[0]/5.0)*50.0
-                voltage = 123.0
+                voltage = 242.0
                 wattage = current*voltage
+
+                now = datetime.utcnow()
+                timeStr = now.strftime("%Y-%m-%dT%H:%M:%SZ") # floor of now
+                nextSec = datetime.strptime(timeStr, "%Y-%m-%dT%H:%M:%SZ") + timedelta(seconds=1) #floor of next second
                 
                 # Print the ADC values.
                 #print('| {0:>+9.6f} | {1:>+9.6f} | {2:>+9.6f} | {3:>+9.6f} |'.format(*voltages))
                 
                 #display.print(list(map(lambda f: '{0:>+9.6f}'.format(f), voltages)))
-                display.print(['{0:>+9.6f} V raw'.format(rawVoltage),
-                    '{0:>+9.6f} I'.format(current),
-                    '{0:>+9.4f} V'.format(voltage),
-                    '{0:>+9.6f} W'.format(wattage)])
-                # Pause for one second.
-                time.sleep(1.0)
+                display.print([timeStr,
+                    '{0:>+9.6f} Amps'.format(current),
+                    '{0:>+9.4f} Volts'.format(voltage),
+                    '{0:>+9.6f} Watts'.format(wattage)])
+                # Pause until the next second.
+                pause = (nextSec - datetime.utcnow()).total_seconds()
+                if pause < 0:
+                    pause = 0
+                time.sleep(pause)
 
 except KeyboardInterrupt:
     quit()
