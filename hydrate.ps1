@@ -1,1 +1,2 @@
-sudo pip install adafruit-ads1x15
+#sudo pip install adafruit-ads1x15
+pip install monthdelta -t ./

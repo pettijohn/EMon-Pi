@@ -1,47 +1,120 @@
 from datetime import datetime, timedelta, timezone
 from monthdelta import monthdelta
+from typing import List
 
-class Agg:
-    def __init__(self, bucketFormatStr, fEndTime, fCount, cAggFrom):
-        self.bucketFormatStr = bucketFormatStr
-        self.fEndTime = fEndTime
-        self.fCount = fCount
-        self.cAggFrom = cAggFrom
+class BucketRule:
+    """ Defines a rule for bucketing by time windows, e.g. minute, day, year """
+    def __init__(self, bucketFormat: str, aggedFrom: type):
+        self.BucketFormat = bucketFormat
+        self.AggedFrom = aggedFrom
+    def BucketID(self, time: datetime) -> str:
+        """ ID used in underlying storage """
+        return time.strftime(self.BucketFormat)
+    def BucketStartTime(self, time:datetime) -> datetime:
+        return datetime.strptime(self.BucketID(time), self.BucketFormat).replace(tzinfo=timezone.utc)
+    def BucketEndTime(self, time: datetime) -> datetime:
+        pass
+    def CountInBucket(self, time: datetime) -> int:
+        pass
 
-    def BucketID(self, time):
-        return time.strftime(self.bucketFormatStr)
+class MinuteBucket(BucketRule):
+    def __init__(self):
+        super().__init__("%Y-%m-%dT%H:%MZ", MinuteBucket)
 
-    def BucketRange(self, time):
-        """ Following the rules of the bucket, return the start (inclusive), end (exclusive), and count of subunits """
-        bucketStart = datetime.strptime(self.BucketID(time), self.bucketFormatStr).replace(tzinfo=timezone.utc)
-        bucketEnd = self.fEndTime(bucketStart)
-        count = self.fCount(bucketEnd - bucketStart)
-        return bucketStart, bucketEnd, count
-
-    def IncrementAvg(self, time, prev, increment):
-        bucketStart, bucketEnd, count = self.BucketRange(time)
-        return prev + (increment / count)
-
-    def IncrementSum(self, time, prev, increment):
-        #bucketStart, bucketEnd, count = self.BucketRange(time)
-        return prev + increment
-
-# Define the rules for aggregation buckets.
-minuteBucket = Agg("%Y-%m-%dT%H:%MZ", lambda t: t + timedelta(minutes=1), lambda d: d.total_seconds(), None)
-hourBucket   = Agg("%Y-%m-%dT%H:00Z", lambda t: t + timedelta(hours=1), lambda d: d.total_seconds()/60, minuteBucket)
-dayBucket    = Agg("%Y-%m-%dT00:00Z", lambda t: t + timedelta(days=1), lambda d: d.total_seconds()/3600, hourBucket)
-# Note Day and Month go to 1, not zero
-monthBucket  = Agg("%Y-%m-01T00:00Z", lambda t: t + monthdelta(1), lambda d: d.days, dayBucket)
-# Year is 365 days -- not 12 months, since months are irregularly sized 
-yearBucket   = Agg("%Y-01-01T00:00Z", lambda t: t.replace(year=t.year+1), lambda d: d.days, dayBucket)
-# Put them all in an array--order matters! An update in the first cascades all the way up
-#buckets = [minuteBucket, hourBucket, dayBucket, monthBucket, yearBucket]
-
-# Unit tests
-if (__name__ == "__main__"):
-    now = datetime.utcnow().replace(tzinfo=timezone.utc)
-    print (now)
+    def BucketEndTime(self, time:datetime) -> datetime:
+        return self.BucketStartTime(time) + timedelta(minutes=1)
     
-    assert minuteBucket.IncrementSum(now, 2, 2) == 4
-    #assert minuteBucket.IncrementAvg(now, 1, 3) == 2
+    def CountInBucket(self, time: datetime) -> int:
+        return 1 #(self.BucketEndTime(time) - self.BucketStartTime(time)).total_seconds()
 
+class HourBucket(BucketRule):
+    def __init__(self):
+        super().__init__("%Y-%m-%dT%H:00Z", MinuteBucket)
+
+    def BucketEndTime(self, time:datetime) -> datetime:
+        return self.BucketStartTime(time) + timedelta(hours=1)
+    
+    def CountInBucket(self, time: datetime) -> int:
+        return (self.BucketEndTime(time) - self.BucketStartTime(time)).total_seconds()/60
+
+class DayBucket(BucketRule):
+    def __init__(self):
+        super().__init__("%Y-%m-%dT00:00Z", HourBucket)
+
+    def BucketEndTime(self, time:datetime) -> datetime:
+        return self.BucketStartTime(time) + timedelta(days=1)
+    
+    def CountInBucket(self, time: datetime) -> int:
+        return (self.BucketEndTime(time) - self.BucketStartTime(time)).total_seconds()/3600
+
+class MonthBucket(BucketRule):
+    def __init__(self):
+        super().__init__("%Y-%m-01T00:00Z", DayBucket)
+
+    def BucketEndTime(self, time:datetime) -> datetime:
+        return self.BucketStartTime(time) + monthdelta(1)
+    
+    def CountInBucket(self, time: datetime) -> int:
+        return (self.BucketEndTime(time) - self.BucketStartTime(time)).days
+
+class YearBucket(BucketRule):
+    def __init__(self):
+        super().__init__("%Y-01-01T00:00Z", DayBucket)
+
+    def BucketEndTime(self, time:datetime) -> datetime:
+        return self.BucketStartTime(time).replace(year=self.BucketStartTime(time).year+1)
+    
+    def CountInBucket(self, time: datetime) -> int:
+        return (self.BucketEndTime(time) - self.BucketStartTime(time)).days
+
+
+class AllBuckets:
+    MinuteBucket = MinuteBucket()
+    HourBucket = HourBucket()
+    DayBucket = DayBucket()
+    MonthBucket = MonthBucket()
+    YearBucket = YearBucket()
+
+# class Foo:
+#     def IncrementAvg(self, time, prev, increment):
+#         bucketStart, bucketEnd, count = self.BucketRange(time)
+#         return prev + (increment / count)
+
+#     def IncrementSum(self, time, prev, increment):
+#         #bucketStart, bucketEnd, count = self.BucketRange(time)
+#         return prev + increment
+
+
+# Tests
+if (__name__ == "__main__"):
+    baseCase     = datetime(2018,5,5,13,39,12, tzinfo=timezone.utc)
+    leapyearCase = datetime(2016,2,29,13,39,12, tzinfo=timezone.utc)
+    dstStartCase = datetime(2018,3,11,2,39,12, tzinfo=timezone.utc) # No effect, since UTC
+
+    assert AllBuckets.MinuteBucket.BucketID(baseCase) == "2018-05-05T13:39Z"
+    assert AllBuckets.MinuteBucket.BucketEndTime(baseCase) == datetime(2018,5,5,13,40, tzinfo=timezone.utc)
+    assert AllBuckets.MinuteBucket.CountInBucket(baseCase) == 1
+
+    assert AllBuckets.HourBucket.BucketID(baseCase) == "2018-05-05T13:00Z"
+    assert AllBuckets.HourBucket.BucketEndTime(baseCase) == datetime(2018,5,5,14,0, tzinfo=timezone.utc)
+    assert AllBuckets.HourBucket.CountInBucket(baseCase) == 60
+
+    assert AllBuckets.DayBucket.BucketID(baseCase) == "2018-05-05T00:00Z"
+    assert AllBuckets.DayBucket.BucketEndTime(baseCase) == datetime(2018,5,6,0,0, tzinfo=timezone.utc)
+    assert AllBuckets.DayBucket.CountInBucket(baseCase) == 24
+
+    assert AllBuckets.MonthBucket.BucketID(baseCase) == "2018-05-01T00:00Z"
+    assert AllBuckets.MonthBucket.BucketEndTime(baseCase) == datetime(2018,6,1,0,0, tzinfo=timezone.utc)
+    assert AllBuckets.MonthBucket.CountInBucket(baseCase) == 31
+
+    assert AllBuckets.YearBucket.BucketID(baseCase) == "2018-01-01T00:00Z"
+    assert AllBuckets.YearBucket.BucketEndTime(baseCase) == datetime(2019,1,1,0,0, tzinfo=timezone.utc)
+    assert AllBuckets.YearBucket.CountInBucket(baseCase) == 365
+
+    assert AllBuckets.MonthBucket.BucketID(leapyearCase) == "2016-02-01T00:00Z"
+    assert AllBuckets.MonthBucket.BucketEndTime(leapyearCase) == datetime(2016,3,1,0,0, tzinfo=timezone.utc)
+    assert AllBuckets.MonthBucket.CountInBucket(leapyearCase) == 29
+
+    assert AllBuckets.YearBucket.BucketID(leapyearCase) == "2016-01-01T00:00Z"
+    assert AllBuckets.YearBucket.BucketEndTime(leapyearCase) == datetime(2017,1,1,0,0, tzinfo=timezone.utc)
+    assert AllBuckets.YearBucket.CountInBucket(leapyearCase) == 366
