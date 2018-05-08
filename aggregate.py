@@ -75,6 +75,18 @@ class AllBuckets:
     MonthBucket = MonthBucket()
     YearBucket = YearBucket()
 
+class AggField:
+    def __init__(self):
+        pass
+    def AggRule(self, time, ):
+        pass
+
+class MinuteReading:
+    def __init__(self, volts: float, amps: float):
+        self.Volts = volts
+        self.Amps = amps
+        self.WattHours = volts * amps / 60.0
+
 # class Foo:
 #     def IncrementAvg(self, time, prev, increment):
 #         bucketStart, bucketEnd, count = self.BucketRange(time)

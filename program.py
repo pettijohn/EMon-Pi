@@ -41,9 +41,9 @@ try:
                     '{0:>+9.6f} Watts'.format(wattage)])
                 # Pause until the next second.
                 pause = (nextSec - datetime.utcnow()).total_seconds()
-                if pause < 0:
-                    pause = 0
-                time.sleep(pause)
+                if pause > 0:
+                    time.sleep(pause)
+                # Else don't pause 
 
 except KeyboardInterrupt:
     quit()
