@@ -1,5 +1,6 @@
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
-import json
+import simplejson
+from decimal import Decimal
 
 # For certificate based connection
 # Hard-code the ARN for now
@@ -19,15 +20,41 @@ myMQTTClient.configureMQTTOperationTimeout(5)  # 5 sec
 
 myMQTTClient.connect()
 
-current = 0.002
-volts = 242.0
-rate = 0.1326
+current = Decimal(str(0.002))
+volts = Decimal(str(242.0))
+rate = Decimal(str(0.1326))
 payload = { "device_id": arn,
     "bucket_id": "2018-05-08T20:18Z",
-    "current": current,
-    "volts": volts,
-    "watt_hours": current*volts/60,
-    "cost_usd": current*volts/60*rate
+    "current": (current),
+    "volts": (volts),
+    "watt_hours": (Decimal(str(current*volts/60))),
+    "cost_usd": Decimal(str(current*volts/60*rate))
 }
-myMQTTClient.publish("EnergyReading/Minute", json.dumps(payload), 1)
+jsonStr = simplejson.dumps(payload, use_decimal=True)
+jsonDict = simplejson.loads(jsonStr, use_decimal=True)
+
+d = Decimal('30.40')
+simplejson.dumps(d)
+simplejson.loads(simplejson.dumps(d))
+f = simplejson.loads(simplejson.dumps(d)) # f is float
+f = simplejson.loads(simplejson.dumps(d), use_decimal=True) # f is decimal
+
+d = simplejson.dumps(d, use_decimal=True) # d is string
+f = simplejson.loads(d) # f is float
+f = simplejson.loads(d, use_decimal=True) # f is decimal
+z = simplejson.loads(simplejson.dumps(Decimal('30.40'), use_decimal=True), use_decimal=True) # round trip - decimal
+
+foo = """
+{
+  "device_id": "arn:aws:iot:us-east-1:422446087002:thing/EMonPi",
+  "bucket_id": "2018-05-08T20:18Z",
+  "current": 0.002,
+  "volts": 242,
+  "watt_hours": 0.008066666666666666,
+  "cost_usd": 0.00106964
+}
+"""
+dz = simplejson.loads(foo, use_decimal=True)
+
+myMQTTClient.publish("EnergyReading/Minute", jsonStr, 1)
 myMQTTClient.disconnect()
