@@ -1,24 +1,13 @@
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 import simplejson
+from amazon.ion import simpleion
 from decimal import Decimal
 
-# For certificate based connection
-# Hard-code the ARN for now
+# https://s3.amazonaws.com/aws-iot-device-sdk-python-docs/sphinx/html/index.html#
+# https://github.com/aws/aws-iot-device-sdk-python
 # TODO - is there a way to discover this? Once we connect with the certificate, do we know somehow? 
 arn = "arn:aws:iot:us-east-1:422446087002:thing/EMonPi"
-myMQTTClient = AWSIoTMQTTClient(arn)
-# Configurations
-# For TLS mutual authentication
-myMQTTClient.configureEndpoint("a1saci22bpq1k0.iot.us-east-1.amazonaws.com", 8883)
-myMQTTClient.configureCredentials("./hardware/certificates/root-CA.crt", "./hardware/certificates/EMonPi.private.key", "./hardware/certificates/EMonPi.cert.pem")
 
-myMQTTClient.configureOfflinePublishQueueing(-1)  # Infinite offline Publish queueing
-myMQTTClient.configureDrainingFrequency(1)  # Draining: 2 Hz
-myMQTTClient.configureConnectDisconnectTimeout(10)  # 10 sec
-myMQTTClient.configureMQTTOperationTimeout(5)  # 5 sec
-
-
-myMQTTClient.connect()
 
 current = Decimal(str(0.002))
 volts = Decimal(str(242.0))
@@ -30,6 +19,30 @@ payload = { "device_id": arn,
     "watt_hours": (Decimal(str(current*volts/60))),
     "cost_usd": Decimal(str(current*volts/60*rate))
 }
+
+print(simpleion.dumps(payload))
+
+quit()
+
+# For certificate based connection
+# Hard-code the ARN for now
+
+myMQTTClient = AWSIoTMQTTClient(arn)
+# Configurations
+# For TLS mutual authentication
+myMQTTClient.configureEndpoint("a1saci22bpq1k0.iot.us-east-1.amazonaws.com", 8883)
+#myMQTTClient.configureEndpoint("a1saci22bpq1k0.iot.us-east-1.amazonaws.com", 443)
+myMQTTClient.configureCredentials("./hardware/certificates/root-CA.crt", "./hardware/certificates/EMonPi.private.key", "./hardware/certificates/EMonPi.cert.pem")
+
+myMQTTClient.configureOfflinePublishQueueing(-1)  # Infinite offline Publish queueing
+myMQTTClient.configureDrainingFrequency(1)  # Draining: 2 Hz
+myMQTTClient.configureConnectDisconnectTimeout(10)  # 10 sec
+myMQTTClient.configureMQTTOperationTimeout(5)  # 5 sec
+
+
+myMQTTClient.connect()
+
+
 jsonStr = simplejson.dumps(payload, use_decimal=True)
 jsonDict = simplejson.loads(jsonStr, use_decimal=True)
 
@@ -56,5 +69,6 @@ foo = """
 """
 dz = simplejson.loads(foo, use_decimal=True)
 
-myMQTTClient.publish("EnergyReading/Minute", jsonStr, 1)
+#myMQTTClient.publish("EnergyReading/Test", jsonStr, 1)
+myMQTTClient.publish("EnergyReading/Test", "This is a random string, not JSON", 1)
 myMQTTClient.disconnect()
