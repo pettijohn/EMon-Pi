@@ -1,2 +1,4 @@
 *.pyc
 hardware/certificates/*
+lambda/amazon/*
+lambda/amazon.ion/*

@@ -1,7 +1,19 @@
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 import simplejson
+import json
 from amazon.ion import simpleion
 from decimal import Decimal
+
+
+# Helper class to convert a DynamoDB item to JSON.
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, Decimal):
+            if abs(o) % 1 > 0:
+                return float(o)
+            else:
+                return int(o)
+        return super(DecimalEncoder, self).default(o)
 
 # https://s3.amazonaws.com/aws-iot-device-sdk-python-docs/sphinx/html/index.html#
 # https://github.com/aws/aws-iot-device-sdk-python
@@ -20,6 +32,18 @@ payload = { "device_id": arn,
     "cost_usd": Decimal(str(current*volts/60*rate))
 }
 
+print(json.dumps(payload, cls=DecimalEncoder))
+# See also Decimal Encoder here 
+# https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingStarted.Python.02.html
+# https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingStarted.Python.03.html
+
+# What is this? Are there other methods I can override, an can I control serialization? 
+# https://gist.github.com/lucascosta/f884a43c59e26199591ec4e234d069f5
+
+# Logging 
+# https://docs.aws.amazon.com/lambda/latest/dg/python-logging.html
+
+# Fine
 print(simpleion.dumps(payload))
 
 quit()
