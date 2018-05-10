@@ -4,6 +4,7 @@ from decimal import Decimal
 import json
 from amazon.ion import simpleion
 from io import StringIO
+import aggregate
 
 # Helper class to convert a DynamoDB item to JSON.
 class DecimalEncoder(json.JSONEncoder):
@@ -15,6 +16,7 @@ class DecimalEncoder(json.JSONEncoder):
                 return int(o)
         return super(DecimalEncoder, self).default(o)
         
+
 def myDeepCopy(values):
     z = {}
     for k in values.keys():
@@ -30,11 +32,21 @@ def lambda_handler(event, context):
     table = boto3.resource('dynamodb').Table('EnergyMonitor.Minute')
     return table.put_item(Item=payloadValue) 
 
-def bug():
-    d = { "value": Decimal('1.1') }
-    payload = simpleion.dumps(d)
-    payloadValue = simpleion.load(StringIO(payload))
-    c = copy.deepcopy(payloadValue)
+# def lambda_handler(event, context):
+#     payloadValue = simpleion.load(StringIO(event))
+#     c = copy.deepcopy(payloadValue)
+
+#     table = boto3.resource('dynamodb').Table('EnergyMonitor.Minute')
+#     return table.put_item(Item=payloadValue) 
+
+
+def lambda_handler_2(event, context):
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.Table('EnergyMonitor.Minute')
+    
+    
+    eventParsed = json.loads(json.dumps(event, cls=DecimalEncoder), parse_float=Decimal)
+    return table.put_item(Item=eventParsed)
 
 if __name__ == "__main__":
     arn = "TestMessages"
@@ -42,26 +54,19 @@ if __name__ == "__main__":
     volts = Decimal(str(242.0))
     rate = Decimal(str(0.1326))
     payload = { "device_id": arn,
-        "bucket_id": "2018-05-08T20:10Z",
+        "bucket_id": "2018-05-09T19:57Z",
         "current": (current),
         "volts": (volts),
         "watt_hours": (Decimal(str(current*volts/60))),
         "cost_usd": Decimal(str(current*volts/60*rate))
     }
-    payload = simpleion.dumps(payload)
+
+    t = aggregate.Table('EnergyMonitor.Minute', aggregate.AllBuckets.MinuteBucket)
+    t.ProcessRow(payload)
+    
 
     lambda_handler(payload, None)
 
-def deadCode(event, context):
-    dynamodb = boto3.resource('dynamodb')
-    table = dynamodb.Table('EnergyMonitor.Minute')
-    
-    # below works - event is a dict - serialize it back to JSON and then parse back with Decimal handling. 
-    print(type(event))
-    
-    eventParsed = json.loads(json.dumps(event, cls=DecimalEncoder), parse_float=decimal.Decimal)
-    print(eventParsed)
-    #eventWDecimal = json.dumps(eventParsed)
-    return table.put_item(Item=eventParsed) 
+
 
 
