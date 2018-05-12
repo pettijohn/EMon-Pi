@@ -16,6 +16,22 @@ class DecimalEncoder(json.JSONEncoder):
                 return int(o)
         return super(DecimalEncoder, self).default(o)
         
+
+def myDeepCopy(values):
+    z = {}
+    for k in values.keys():
+        t = type(k)
+        z[k] = copy.deepcopy(t(values[k]))
+
+def lambda_handler(event, context):
+    payloadValue = simpleion.load(StringIO(event))
+    z = myDeepCopy(payloadValue)
+    c = copy.deepcopy(z)
+
+    quit()
+    table = boto3.resource('dynamodb').Table('EnergyMonitor.Minute')
+    return table.put_item(Item=payloadValue) 
+
 # def lambda_handler(event, context):
 #     payloadValue = simpleion.load(StringIO(event))
 #     c = copy.deepcopy(payloadValue)
@@ -23,7 +39,8 @@ class DecimalEncoder(json.JSONEncoder):
 #     table = boto3.resource('dynamodb').Table('EnergyMonitor.Minute')
 #     return table.put_item(Item=payloadValue) 
 
-def lambda_handler(event, context):
+
+def lambda_handler_2(event, context):
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table('EnergyMonitor.Minute')
     
