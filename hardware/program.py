@@ -4,7 +4,7 @@ from lcd_i2c import LcdSerialDisplay
 from ADC import ADC
 
 try:
-    with ADC(gain=16) as adc:
+    with ADC(gain=2/3) as adc:
 
         print('Reading ADS1x15 values, press Ctrl-C to quit...')
         # Print nice channel column headers.
@@ -35,8 +35,7 @@ try:
                 #print('| {0:>+9.6f} | {1:>+9.6f} | {2:>+9.6f} | {3:>+9.6f} |'.format(*voltages))
                 
                 #display.print(list(map(lambda f: '{0:>+9.6f}'.format(f), voltages)))
-                display.print([timeStr,
-                    '{0:>+9.6f} Amps'.format(current),
+                display.print([timeStr,                    '{0:>+9.6f} Amps'.format(current),
                     '{0:>+9.4f} Volts'.format(voltage),
                     '{0:>+9.6f} Watts'.format(wattage)])
                 # Pause until the next second.
