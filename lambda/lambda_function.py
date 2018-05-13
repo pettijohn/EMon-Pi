@@ -4,7 +4,8 @@ from decimal import Decimal
 import json
 from amazon.ion import simpleion
 from io import StringIO
-import aggregate
+import pickle
+#import aggregate
 
 # Helper class to convert a DynamoDB item to JSON.
 class DecimalEncoder(json.JSONEncoder):
@@ -16,38 +17,30 @@ class DecimalEncoder(json.JSONEncoder):
                 return int(o)
         return super(DecimalEncoder, self).default(o)
         
-
-def myDeepCopy(values):
-    z = {}
-    for k in values.keys():
-        t = type(k)
-        z[k] = copy.deepcopy(t(values[k]))
-
 def lambda_handler(event, context):
-    payloadValue = simpleion.load(StringIO(event))
-    z = myDeepCopy(payloadValue)
-    c = copy.deepcopy(z)
+    event = json.loads(json.dumps(event, cls=DecimalEncoder), parse_float=Decimal)
 
-    quit()
-    table = boto3.resource('dynamodb').Table('EnergyMonitor.Minute')
-    return table.put_item(Item=payloadValue) 
-
-# def lambda_handler(event, context):
-#     payloadValue = simpleion.load(StringIO(event))
-#     c = copy.deepcopy(payloadValue)
-
-#     table = boto3.resource('dynamodb').Table('EnergyMonitor.Minute')
-#     return table.put_item(Item=payloadValue) 
-
-
-def lambda_handler_2(event, context):
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table('EnergyMonitor.Minute')
     
-    
-    eventParsed = json.loads(json.dumps(event, cls=DecimalEncoder), parse_float=Decimal)
-    return table.put_item(Item=eventParsed)
+    return table.put_item(Item=event)
 
+def GetItem(self, eventTime: datetime, values: dict) -> dict:
+    """ Returns the item from the this bucket table """
+    table = BucketRule.GetTable("EnergyMonitor." + self.TableSuffix)
+    
+    values['bucket_id'] = self.BucketID(eventTime)
+    response = table.get_item(
+        Key={
+            'device_id': values['device_id'],
+            'bucket_id': values['bucket_id']
+        }
+    )
+    if 'Item' in response:
+        return response['Item']
+    else:
+        return None
+        
 if __name__ == "__main__":
     arn = "TestMessages"
     current = Decimal(str(0.002))
@@ -61,8 +54,8 @@ if __name__ == "__main__":
         "cost_usd": Decimal(str(current*volts/60*rate))
     }
 
-    t = aggregate.Table('EnergyMonitor.Minute', aggregate.AllBuckets.MinuteBucket)
-    t.ProcessRow(payload)
+    # t = aggregate.Table('EnergyMonitor.Minute', aggregate.AllBuckets.MinuteBucket)
+    # t.ProcessRow(payload)
     
 
     lambda_handler(payload, None)

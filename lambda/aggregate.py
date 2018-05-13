@@ -3,8 +3,24 @@ from monthdelta import monthdelta
 from typing import List
 import boto3
 
+class MockTable:
+    def __init__(self, tableName):
+        self.TableName = tableName
+
+    """ Mocks boto3's dynamodb table. """
+    def get_item(self, **kwargs):
+        assert "Key" in kwargs
+        Key = kwargs["Key"]
+        assert ['device_id']
+        assert ['bucket_id']
+
+
 class BucketRule:
     """ Defines a rule for bucketing by time windows, e.g. minute, day, year """
+
+    """ Func to get a table. Dynamo by default. Can be swapped out for mock table. """
+    GetTable = lambda tableName: boto3.resource('dynamodb').Table(tableName)
+
     def __init__(self, tableSuffix: str, bucketFormat: str, aggedFrom: type, *aggedTo):
         self.TableSuffix = tableSuffix
         self.BucketFormat = bucketFormat
@@ -25,8 +41,8 @@ class BucketRule:
         pass
     def GetItem(self, eventTime: datetime, values: dict) -> dict:
         """ Returns the item from the this bucket table """
-        dynamodb = boto3.resource('dynamodb')
-        dynamodb.Table("EnergyMonitor." + self.TableSuffix)
+        table = BucketRule.GetTable("EnergyMonitor." + self.TableSuffix)
+        
         values['bucket_id'] = self.BucketID(eventTime)
         response = table.get_item(
             Key={
@@ -211,3 +227,6 @@ if (__name__ == "__main__"):
     assert AllBuckets.YearBucket.BucketID(leapyearCase) == "2016-01-01T00:00Z"
     assert AllBuckets.YearBucket.BucketEndTime(leapyearCase) == datetime(2017,1,1,0,0, tzinfo=timezone.utc)
     assert AllBuckets.YearBucket.CountInBucket(leapyearCase) == 366
+
+    # Override the dynamo table with mock for testing
+    BucketRule.GetTable = lambda tableName: MockTable(tableName)
