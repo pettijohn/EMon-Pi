@@ -1,5 +1,4 @@
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
-import simplejson
 import json
 from decimal import Decimal
 

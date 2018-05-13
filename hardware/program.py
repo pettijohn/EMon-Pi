@@ -4,10 +4,12 @@ from decimal import Decimal
 from datetime import datetime, timedelta
 from lcd_i2c import LcdSerialDisplay
 from ADC import ADC
+import json
 
 arn = "arn:aws:iot:us-east-1:422446087002:thing/EMonPi"
+print("Connecting IoT client")
 client = connect.Client(arn)
-rate = Decimal(str(0.1326))
+rate = Decimal('0.1326')/Decimal(1000) # 13 cents per KWh
 
 try:
     with ADC(gain=2/3) as adc:
@@ -22,6 +24,7 @@ try:
             # Take a reading each second - at the next minute, average and send to cloud
             currentReadings = []
             prevMinute = ""
+            print("Starting main loop")
             
             # Main loop.
             while True:
@@ -56,15 +59,20 @@ try:
                     prevMinute = minuteStr
                     avgCurrent = sum(currentReadings) / len(currentReadings)
                     # Reset the array
+                    #print(currentReadings)
+                    #print(str(len(currentReadings)))
                     currentReadings = []
                     payload = { "device_id": arn,
                         "bucket_id": now.strftime("%Y-%m-%dT%H:%MZ"),
                         "current": (avgCurrent),
                         "volts": (voltage),
-                        "watt_hours": current*voltage/60,
-                        "cost_usd": current*voltage/60*rate
+                        "watt_hours": avgCurrent*voltage/60,
+                        "cost_usd": avgCurrent*voltage/60*rate
                     }
-                    client.publish("EnergyReading/Minute", json.dumps(payload, cls=client.DecimalEncoder)
+                    strPayload = json.dumps(payload, cls=connect.DecimalEncoder)
+                    #print("Sending payload:")
+                    #print(strPayload)
+                    client.publish("EnergyReading/Minute", strPayload, 0)
                     
 
 
