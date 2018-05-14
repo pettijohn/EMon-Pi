@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from monthdelta import monthdelta
 from typing import List
 import boto3
@@ -14,12 +15,16 @@ class MockTable:
         assert ['device_id']
         assert ['bucket_id']
 
+    def put_item(self, **kwargs):
+        pass
+
 
 class BucketRule:
     """ Defines a rule for bucketing by time windows, e.g. minute, day, year """
 
     """ Func to get a table. Dynamo by default. Can be swapped out for mock table. """
-    GetTable = lambda tableName: boto3.resource('dynamodb').Table(tableName)
+    def GetTable(self, tableName):
+        return boto3.resource('dynamodb').Table(tableName)
 
     def __init__(self, tableSuffix: str, bucketFormat: str, aggedFrom: type, *aggedTo):
         self.TableSuffix = tableSuffix
@@ -36,12 +41,66 @@ class BucketRule:
     def CountInBucket(self, time: datetime) -> int:
         """ How many of the previous bucket are required to make this bucket? """
         pass
-    def ProcessEvent(self, time: datetime, values: dict):
+    def ProcessEvent(self, prevBucket: BucketRule, eventTime: datetime, values: dict):
         """ Take an event, aggregate it, and call the next bucket(s) """
-        pass
+        # All rules other than Minute follow a standard pattern:
+        # - Get the existing row for the bucket, if present
+        # - If an average rule, divide this share and add
+        # - Else if a sum rule, just add
+        # - Save back to table
+        item = self.GetItem(eventTime, values)
+        insert = False
+        if item is None:
+            # Set everything to zero and insert
+            insert = True
+            item = { 
+                'device_id': values['device_id'],
+                'bucket_id': self.BucketID(eventTime),
+                "current": Decimal(0),
+                "volts": Decimal(0),
+                "watt_hours": Decimal(0),
+                "cost_usd": Decimal(0)
+            }
+
+        # Update by averaging or summing 
+        # FIXME this pattern has bugs. If I insert to the minute bucket and then sum to the hour bucket,
+        #  the next minute bucket will re-add the aggregated values.
+        # Should I add the minute bucket to each bucket?
+        # Or recompute each one by selecting everything each time?
+        # Selecting and re-agg'ing seems more reliable, but may incure higher DynamoDB costs
+        item['current'] = item['current'] + (values['current'] / Decimal(self.CountInBucket))
+        item['volts'] = item['volts'] + (values['volts'] / Decimal(self.CountInBucket))
+        item['watt_hours'] = item['watt_hours'] + values['watt_hours']
+        item['cost_usd'] = item['cost_usd'] + values['cost_usd']
+
+        table = self.GetTable("EnergyMonitor." + self.TableSuffix)
+        if(insert):
+            table.put_item(Item=values)
+        else:
+            response = table.update_item(
+                Key={
+                    'device_id': item['device_id'],
+                    'bucket_id': item['bucket_id']
+                },
+                UpdateExpression="set current=:c, volts=:v, watt_hours=:w, cost_usd=:u",
+                ExpressionAttributeValues={
+                    ':c': item['current'],
+                    ':v': item['volts'],
+                    ':w': item['watt_hours'],
+                    ':u': item['cost_usd']
+                },
+                ReturnValues="UPDATED_NEW"
+            )
+
+        # Chain and call the next level of buckets in the hierarchy
+        for to in self.AggedTo:
+            nextBucket = to()
+            # FIXME - passing item to the next level is wrong
+            nextBucket.ProcessEvent(self, eventTime, item)
+        
     def GetItem(self, eventTime: datetime, values: dict) -> dict:
         """ Returns the item from the this bucket table """
-        table = BucketRule.GetTable("EnergyMonitor." + self.TableSuffix)
+        table = self.GetTable("EnergyMonitor." + self.TableSuffix)
         
         values['bucket_id'] = self.BucketID(eventTime)
         response = table.get_item(
@@ -72,6 +131,7 @@ class MinuteBucket(BucketRule):
             # This is an error for Minute bucket, but let's just log and ignore
             print("Error - found row that shouldn't exist with values {0} ...... Skiping writing {1}".format(str(response['Item']), str(values)))
         else:
+            table = self.GetTable("EnergyMonitor." + self.TableSuffix)
             table.put_item(Item=values)
         
         # Chain and call the next level of buckets in the hierarchy
@@ -131,67 +191,11 @@ class AllBuckets:
     YearBucket = YearBucket()
     All = [MinuteBucket, HourBucket, DayBucket, MonthBucket, YearBucket]
 
-def foo():
-    pass
 
-class Table:
-    def __init__(self, tableName, bucketRule):
-        self.TableName = tableName
-        self.BucketRule = bucketRule
-        #self.Fields = fields
-
-    def ProcessRow(self, values: dict):
-        dynamodb = boto3.resource('dynamodb')
-        dynamodb.Table(self.TableName)
-        response = table.get_item(
-            Key={
-                'device_id': values['device_id'],
-                'bucket_id': values['bucket_id']
-            }
-        )
-        if 'Item' in response:
-            # Got a matching row
-        else:
-            # Insert
-        
-
-class AggRule:
-    def Agg(self, time, prev, increment):
-        pass
-
-class Unity(AggRule):
-    """ Returns the increment; noop """
-    def Agg(self, time, prev, increment):
-        return increment
-
-class Sum(AggRule):
-    """ Returns prev + increment """
-    def Agg(self, time, prev, increment):
-        return prev + increment
 
 class AllTables:
     Minute = Table('EnergyMonitor.Minute', MinuteBucket(), AggField("device_id", ))
 
-class AggField:
-    def __init__(self, fieldName, fAggRule):
-        pass
-
-
-
-class MinuteReading:
-    def __init__(self, volts: float, amps: float):
-        self.Volts = volts
-        self.Amps = amps
-        self.WattHours = volts * amps / 60.0
-
-# class Foo:
-#     def IncrementAvg(self, time, prev, increment):
-#         bucketStart, bucketEnd, count = self.BucketRange(time)
-#         return prev + (increment / count)
-
-#     def IncrementSum(self, time, prev, increment):
-#         #bucketStart, bucketEnd, count = self.BucketRange(time)
-#         return prev + increment
 
 
 # Tests
@@ -229,4 +233,4 @@ if (__name__ == "__main__"):
     assert AllBuckets.YearBucket.CountInBucket(leapyearCase) == 366
 
     # Override the dynamo table with mock for testing
-    BucketRule.GetTable = lambda tableName: MockTable(tableName)
+    BucketRule.GetTable = lambda self, tableName: MockTable(tableName)
