@@ -66,8 +66,8 @@ try:
                         "bucket_id": now.strftime("%Y-%m-%dT%H:%MZ"),
                         "current": (avgCurrent),
                         "volts": (voltage),
-                        "watt_hours": avgCurrent*voltage/60,
-                        "cost_usd": avgCurrent*voltage/60*rate
+                        "watt_hours": avgCurrent*voltage/Decimal('60'),
+                        "cost_usd": avgCurrent*voltage/Decimal('60')*rate
                     }
                     strPayload = json.dumps(payload, cls=connect.DecimalEncoder)
                     #print("Sending payload:")
