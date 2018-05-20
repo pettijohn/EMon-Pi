@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from collections import OrderedDict
 from decimal import Decimal
 from monthdelta import monthdelta
 from typing import List
@@ -26,17 +27,15 @@ class BucketRule:
     """ Func to get a table. Dynamo by default. Can be swapped out for mock table. """
     def GetTable(self, tableName):
         return boto3.resource('dynamodb').Table(tableName)
-
+        
     # FIXME - decide on a pattern. Either suffix, format, etc, pass in to ctor. Or child classes override. 
-    def __init__(self, bucketFormat: str, eventTime: datetime, aggedFrom, *aggedTo):
-        self.BucketFormat = bucketFormat
+    def __init__(self, eventTime: datetime, aggedFrom, *aggedTo):
+        """ Table is EnergyMonitor.<TableSuffix> """
+        self.TablesSuffix = None
+        self.BucketFormat = None
         self.AggedFrom = aggedFrom
         self.AggedTo = aggedTo
         self.EventTime = eventTime
-
-    def TableSuffix(self) -> str:
-        """ Table is EnergyMonitor.<TableSuffix> """
-        pass
 
     def BucketID(self) -> str:
         """ ID used in underlying storage """
@@ -132,10 +131,9 @@ class BucketRule:
 
 class MinuteBucket(BucketRule):
     def __init__(self, eventTime: datetime):
-        super().__init__("%Y-%m-%dT%H:%MZ", eventTime, None, HourBucket)
-
-    def TableSuffix(self):
-        return "Minute"        
+        super().__init__(eventTime, None, HourBucket)
+        self.TableSuffix = "Minute"
+        self.BucketFormat = "%Y-%m-%dT%H:%MZ"
 
     def BucketEndTime(self) -> datetime:
         return self.BucketStartTime() + timedelta(minutes=1)
@@ -160,10 +158,9 @@ class MinuteBucket(BucketRule):
 
 class HourBucket(BucketRule):
     def __init__(self, eventTime: datetime):
-        super().__init__("%Y-%m-%dT%H:00Z", eventTime, MinuteBucket, DayBucket)
-
-    def TableSuffix(self):
-        return "Hour"
+        super().__init__(eventTime, MinuteBucket, DayBucket)
+        self.TableSuffix = "Hour"
+        self.BucketFormat = "%Y-%m-%dT%H:00Z"
 
     def BucketEndTime(self) -> datetime:
         return self.BucketStartTime() + timedelta(hours=1)
@@ -177,10 +174,9 @@ class HourBucket(BucketRule):
 
 class DayBucket(BucketRule):
     def __init__(self, eventTime: datetime):
-        super().__init__("%Y-%m-%dT00:00Z", eventTime, HourBucket, MonthBucket)
-
-    def TableSuffix(self):
-        return "Day"
+        super().__init__(eventTime, HourBucket, MonthBucket)
+        self.TableSuffix = "Day"
+        self.BucketFormat = "%Y-%m-%dT00:00Z"
 
     def BucketEndTime(self) -> datetime:
         return self.BucketStartTime() + timedelta(days=1)
@@ -190,10 +186,9 @@ class DayBucket(BucketRule):
 
 class MonthBucket(BucketRule):
     def __init__(self, eventTime: datetime):
-        super().__init__("%Y-%m-01T00:00Z", eventTime, DayBucket, YearBucket)
-
-    def TableSuffix(self):
-        return "Month"
+        super().__init__(eventTime, DayBucket, YearBucket)
+        self.TableSuffix = "Month"
+        self.BucketFormat = "%Y-%m-01T00:00Z"
 
     def BucketEndTime(self) -> datetime:
         return self.BucketStartTime() + monthdelta(1)
@@ -203,16 +198,17 @@ class MonthBucket(BucketRule):
 
 class YearBucket(BucketRule):
     def __init__(self, eventTime: datetime):
-        super().__init__("%Y-01-01T00:00Z", eventTime, MonthBucket, None)
-
-    def TableSuffix(self):
-        return "Year"
+        super().__init__(eventTime, MonthBucket, None)
+        self.TableSuffix = "Year"
+        self.BucketFormat = "%Y-01-01T00:00Z"
 
     def BucketEndTime(self) -> datetime:
         return self.BucketStartTime().replace(year=self.BucketStartTime().year+1)
     
     def CountInBucket(self) -> int:
         return (self.BucketEndTime() - self.BucketStartTime()).days
+
+BucketChain = [MinuteBucket, HourBucket, MonthBucket, YearBucket]
 
 
 # Tests
