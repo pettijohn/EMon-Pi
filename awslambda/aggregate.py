@@ -12,13 +12,10 @@ class MockTable:
 
     """ Mocks boto3's dynamodb table. """
     def get_item(self, **kwargs):
-        assert "Key" in kwargs
-        Key = kwargs["Key"]
-        assert ['device_id']
-        assert ['bucket_id']
+        return {}
 
     def put_item(self, **kwargs):
-        return kwargs
+        print(kwargs)
 
 
 class BucketRule:
@@ -48,6 +45,17 @@ class BucketRule:
         """ How many of the previous bucket are required to make this bucket? """
         # Subclass must implement
         pass
+
+    def GetChildren(self, values: dict):
+        # Find the start and end bucket IDs for this bucket
+        childStart = self.BucketID()
+        childEnd = self.BucketEndTime().strftime(self.BucketFormat)
+        # The child bucket
+        childTable = self.GetTable(self.AggedFrom.TableSuffix)
+        children = childTable.query(
+            KeyConditionExpression=Key('device_id').eq(values['device_id']) & Key('bucket_id').gte(childStart) & Key('bucket_id').lt(childEnd)
+        )
+        return children['Items']
     def ProcessEvent(self, values: dict):
         """ Take an event, aggregate it, and call the next bucket(s) """
         # All rules other than Minute follow a standard pattern:
@@ -68,15 +76,8 @@ class BucketRule:
                 "cost_usd": Decimal(0)
             }
 
-        # Find the start and end bucket IDs for this bucket
-        childStart = self.BucketID
-        childEnd = self.BucketEndTime().strftime(self.BucketFormat)
-        # The child bucket
-        childTable = self.GetTable(self.AggedFrom.TableSuffix()) # FIXME
-        # And all of the constituent rows
-        childRows = childTable.query(
-            KeyConditionExpression=Key('device_id').eq(values['device_id']) & Key('bucket_id').gte(childStart) & Key('bucket_id').lt(childEnd)
-        )
+        # Get all of the constituent rows
+        childRows = self.GetChildren(values)
 
         # Update by averaging or summing 
         # FIXME this pattern has bugs. If I insert to the minute bucket and then sum to the hour bucket,
@@ -146,6 +147,7 @@ class MinuteBucket(BucketRule):
         else:
             table = self.GetTable("EnergyMonitor." + self.TableSuffix)
             table.put_item(Item=values)
+        self.AggTo(self.EventTime, self)
 
 class HourBucket(BucketRule):
     def __init__(self, eventTime: datetime, aggedFrom: BucketRule):
@@ -159,10 +161,6 @@ class HourBucket(BucketRule):
     
     def CountInBucket(self) -> int:
         return (self.BucketEndTime() - self.BucketStartTime()).total_seconds()/60
-
-    def ProcessEvent(self, prevBucket: BucketRule, eventTime: datetime, values: dict):
-        pass
-
 
 class DayBucket(BucketRule):
     def __init__(self, eventTime: datetime, aggedFrom: BucketRule):
@@ -247,6 +245,8 @@ if (__name__ == "__main__"):
 
     # Override the dynamo table with mock for testing
     BucketRule.GetTable = lambda self, tableName: MockTable(tableName)
+    #MockTable.get_item = lambda self,  **kwargs: {} # Should not be a matching row
+
     mb.ProcessEvent(
         { "device_id": "TestEvent",
             "bucket_id": baseCase.strftime("%Y-%m-%dT%H:%MZ"),
