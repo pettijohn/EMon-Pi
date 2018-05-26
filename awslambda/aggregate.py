@@ -60,7 +60,7 @@ class BucketRule:
         return children['Items']
         #return children
 
-    def ProcessEvent(self):
+    def ProcessEvent(self, chain=True):
         """ Take an event, aggregate it, and call the next bucket(s) """
         # All rules other than Minute follow a standard pattern:
         # - Get the existing row for the bucket, if present
@@ -70,6 +70,7 @@ class BucketRule:
         item = self.GetItem()
         insert = False
         if item is None:
+            # Initialize empty item
             insert = True
             item = { 
                 'device_id': self.Values['device_id'],
@@ -86,31 +87,41 @@ class BucketRule:
         # Update by averaging or summing 
         # Recompute each one by selecting all of its children
         # Selecting and re-agg'ing is self-healing and better than trying to only incrementally update
-
         item['current'] = sum(map(lambda i: i['current'], childRows)) / self.CountInBucket()
         item['volts'] = sum(map(lambda i: i['volts'], childRows)) / self.CountInBucket()
         item['watt_hours'] = sum(map(lambda i: i['watt_hours'], childRows))
         item['cost_usd'] = sum(map(lambda i: i['cost_usd'], childRows))
-        return item
+        # if not chain:
+        #     return item
 
         table = self.GetTable(self.TableSuffix)
+        results = None
         if(insert):
-            return table.put_item(Item=self.Values)
+             results = table.put_item(Item=item)
         else:
-            return table.update_item(
+            results = table.update_item(
                 Key={
                     'device_id': item['device_id'],
                     'bucket_id': item['bucket_id']
                 },
-                UpdateExpression="set current=:c, volts=:v, watt_hours=:w, cost_usd=:u",
+                UpdateExpression="set #c=:c, volts=:v, watt_hours=:w, cost_usd=:u",
                 ExpressionAttributeValues={
                     ':c': item['current'],
                     ':v': item['volts'],
                     ':w': item['watt_hours'],
                     ':u': item['cost_usd']
                 },
+                ExpressionAttributeNames={
+                    # CURRENT is a reserved word in DynamoDB
+                    # https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ExpressionAttributeNames.html
+                    # https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html 
+                    "#c":"current"
+                },
                 ReturnValues="UPDATED_NEW"
             )
+
+        # TODO Chain
+        return results
         
     def GetItem(self) -> dict:
         """ Returns the item from the this bucket table """
