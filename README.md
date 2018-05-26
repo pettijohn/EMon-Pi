@@ -22,5 +22,4 @@ Contains code to create DynamoDB tables, configure IoT, and upload Lambda functi
 Run `aws configure` and enter the access key for an IAM user with the necessary permissions. 
 
 # TODO
-* First accurate readings: 2018-05-13T04:10Z - before that has incorrect rates at least
-* First aggreaget readings: 
+* 
