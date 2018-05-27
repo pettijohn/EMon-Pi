@@ -13,12 +13,12 @@
             "program": "${file}"
         },
         {
-            "name": "Python: Ops Fix",
+            "name": "Python: ReAgg",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}\\ops.py",
             "args": [
-                "fix"
+                "reagg"
             ]
         },
         {

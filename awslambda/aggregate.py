@@ -48,6 +48,11 @@ class BucketRule:
         # Subclass must implement
         pass
 
+    def NextBucketStart(self) -> datetime:
+        """ Start of next bucket. """
+        # Subclass must implement
+        pass
+
     def GetChildren(self):
         # Find the start and end bucket IDs for this bucket
         childStart = self.BucketID()
@@ -83,6 +88,8 @@ class BucketRule:
 
         # Get all of the constituent rows
         childRows = self.GetChildren()
+        if len(childRows) != self.CountInBucket():
+            print("WARN: Bucket {0} {1} has {2} children, expected {3}".format(self.TableSuffix, self.BucketID(), len(childRows), self.CountInBucket()))
 
         # Update by averaging or summing 
         # Recompute each one by selecting all of its children
@@ -120,8 +127,12 @@ class BucketRule:
                 ReturnValues="UPDATED_NEW"
             )
 
-        # TODO Chain
-        return results
+        if chain and self.AggTo is not None:
+            # Aggregate to the next level
+            nextLevel = self.AggTo(self.EventTime, self, item)
+            return nextLevel.ProcessEvent(chain)
+        else:
+            return results
         
     def GetItem(self) -> dict:
         """ Returns the item from the this bucket table """
@@ -152,7 +163,10 @@ class MinuteBucket(BucketRule):
     def CountInBucket(self) -> int:
         return 1 
 
-    def ProcessEvent(self):
+    def NextBucketStart(self) -> timedelta:
+        return self.BucketStartTime() + timedelta(minutes=1)
+
+    def ProcessEvent(self, chain=True):
         item = self.GetItem()
         if item is not None:
             # Got a matching row
@@ -160,8 +174,14 @@ class MinuteBucket(BucketRule):
             print("Error - found row that shouldn't exist with values {0} ...... Skiping writing {1}".format(str(item), str(self.Values)))
         else:
             table = self.GetTable(self.TableSuffix)
-            table.put_item(Item=self.Values)
-        self.AggTo(self.EventTime, self)
+            results = table.put_item(Item=self.Values)
+            
+        if chain and self.AggTo is not None:
+            # Aggregate to the next level
+            nextLevel = self.AggTo(self.EventTime, self, item)
+            return nextLevel.ProcessEvent(chain)
+        else:
+            return results
 
 class HourBucket(BucketRule):
     def __init__(self, eventTime: datetime, aggedFrom: BucketRule, values: dict):
@@ -173,6 +193,9 @@ class HourBucket(BucketRule):
     def BucketEndTime(self) -> datetime:
         return self.BucketStartTime() + timedelta(hours=1) - timedelta(minutes=1)
     
+    def NextBucketStart(self) -> timedelta:
+        return self.BucketStartTime() + timedelta(hours=1)
+
     def CountInBucket(self) -> int:
         return int((self.BucketEndTime() - self.BucketStartTime()).total_seconds()/60 + 1)
 
@@ -186,6 +209,9 @@ class DayBucket(BucketRule):
     def BucketEndTime(self) -> datetime:
         return self.BucketStartTime() + timedelta(days=1) - timedelta(hours=1)
     
+    def NextBucketStart(self) -> timedelta:
+        return self.BucketStartTime() + timedelta(days=1)
+
     def CountInBucket(self) -> int:
         return int((self.BucketEndTime() - self.BucketStartTime()).total_seconds()/3600 + 1)
 
@@ -199,6 +225,9 @@ class MonthBucket(BucketRule):
     def BucketEndTime(self) -> datetime:
         return self.BucketStartTime() + monthdelta(1) - timedelta(days=1)
     
+    def NextBucketStart(self) -> timedelta:
+        return self.BucketStartTime() + monthdelta(1)
+
     def CountInBucket(self) -> int:
         return int((self.BucketEndTime() - self.BucketStartTime()).days + 1)
 
@@ -207,10 +236,14 @@ class YearBucket(BucketRule):
         super().__init__(eventTime, aggedFrom, values)
         self.TableSuffix = "Year"
         self.BucketFormat = "%Y-01-01T00:00Z"
+        self.AggTo = None
 
     def BucketEndTime(self) -> datetime:
         return self.BucketStartTime().replace(year=self.BucketStartTime().year+1) - timedelta(days=1)
     
+    def NextBucketStart(self) -> timedelta:
+        return self.BucketStartTime().replace(year=self.BucketStartTime().year+1)
+
     def CountInBucket(self) -> int:
         return int((self.BucketEndTime() - self.BucketStartTime()).days + 1)
 
@@ -225,42 +258,49 @@ if (__name__ == "__main__"):
     mb = MinuteBucket(baseCase, {})
     assert mb.BucketID() == "2018-05-05T13:39Z"
     assert mb.BucketEndTime() == datetime(2018,5,5,13,39,59, tzinfo=timezone.utc)
+    assert mb.NextBucketStart() == datetime(2018,5,5,13,40,0, tzinfo=timezone.utc)
     assert mb.CountInBucket() == 1
     assert type(mb.CountInBucket()) == int
 
     hb = HourBucket(baseCase, mb, {})
     assert hb.BucketID() == "2018-05-05T13:00Z"
     assert hb.BucketEndTime() == datetime(2018,5,5,13,59, tzinfo=timezone.utc)
+    assert hb.NextBucketStart() == datetime(2018,5,5,14,00, tzinfo=timezone.utc)
     assert hb.CountInBucket() == 60
     assert type(hb.CountInBucket()) == int
 
     db = DayBucket(baseCase, hb, {})
     assert db.BucketID() == "2018-05-05T00:00Z"
     assert db.BucketEndTime() == datetime(2018,5,5,23,0, tzinfo=timezone.utc)
+    assert db.NextBucketStart() == datetime(2018,5,6,0,0, tzinfo=timezone.utc)
     assert db.CountInBucket() == 24
     assert type(db.CountInBucket()) == int
 
     mt = MonthBucket(baseCase, db, {})
     assert mt.BucketID() == "2018-05-01T00:00Z"
     assert mt.BucketEndTime() == datetime(2018,5,31,0,0, tzinfo=timezone.utc)
+    assert mt.NextBucketStart() == datetime(2018,6,1,0,0, tzinfo=timezone.utc)
     assert mt.CountInBucket() == 31
     assert type(mt.CountInBucket()) == int
 
     yb = YearBucket(baseCase, mb, {})
     assert yb.BucketID() == "2018-01-01T00:00Z"
     assert yb.BucketEndTime() == datetime(2018,12,31,0,0, tzinfo=timezone.utc)
+    assert yb.NextBucketStart() == datetime(2019,1,1,0,0, tzinfo=timezone.utc)
     assert yb.CountInBucket() == 365
     assert type(yb.CountInBucket()) == int
 
     ml = MonthBucket(leapyearCase, None, {})
     assert ml.BucketID() == "2016-02-01T00:00Z"
     assert ml.BucketEndTime() == datetime(2016,2,29,0,0, tzinfo=timezone.utc)
+    assert ml.NextBucketStart() == datetime(2016,3,1,0,0, tzinfo=timezone.utc)
     assert ml.CountInBucket() == 29
     assert type(ml.CountInBucket()) == int
 
     yl = YearBucket(leapyearCase, None, {})
     assert yl.BucketID() == "2016-01-01T00:00Z"
     assert yl.BucketEndTime() == datetime(2016,12,31,0,0, tzinfo=timezone.utc)
+    assert yl.NextBucketStart() == datetime(2017,1,1,0,0, tzinfo=timezone.utc)
     assert yl.CountInBucket() == 366
     assert type(yl.CountInBucket()) == int
 
