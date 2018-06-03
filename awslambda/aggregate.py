@@ -30,7 +30,7 @@ class BucketRule:
         self.TableSuffix = None
         self.BucketFormat = None
         self.AggedFrom = aggedFrom
-        self.AggTo = None # Callable class to chain for next level aggregation
+        self.AggTo = BucketRule # Callable class to chain for next level aggregation
         self.EventTime = eventTime
         self.Values = values
 
@@ -176,7 +176,7 @@ class MinuteBucket(BucketRule):
             table = self.GetTable(self.TableSuffix)
             results = table.put_item(Item=self.Values)
             
-        if chain and self.AggTo is not None:
+        if chain and self.AggTo is not None and type(self.AggTo) != BucketRule:
             # Aggregate to the next level
             nextLevel = self.AggTo(self.EventTime, self, item)
             return nextLevel.ProcessEvent(chain)
@@ -245,7 +245,7 @@ class YearBucket(BucketRule):
         return self.BucketStartTime().replace(year=self.BucketStartTime().year+1)
 
     def CountInBucket(self) -> int:
-        return int((self.BucketEndTime() - self.BucketStartTime()).days + 1)
+        return 12
 
 
 # Tests

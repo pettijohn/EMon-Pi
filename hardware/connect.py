@@ -26,7 +26,7 @@ def Client(arn):
     myMQTTClient.configureCredentials("./hardware/certificates/root-CA.crt", "./hardware/certificates/EMonPi.private.key", "./hardware/certificates/EMonPi.cert.pem")
 
     myMQTTClient.configureOfflinePublishQueueing(-1)  # Infinite offline Publish queueing
-    myMQTTClient.configureDrainingFrequency(1)  # Draining: 2 Hz
+    myMQTTClient.configureDrainingFrequency(1)  # Draining: 1 Hz
     myMQTTClient.configureConnectDisconnectTimeout(10)  # 10 sec
     myMQTTClient.configureMQTTOperationTimeout(5)  # 5 sec
 

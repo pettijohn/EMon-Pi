@@ -12,8 +12,6 @@ firstBucket = "2018-05-13T03:58Z"
 firstTime = datetime(2018,5,13,3,58,0, tzinfo=timezone.utc)
 endTime = datetime.utcnow().replace(tzinfo=timezone.utc)
 
-
-
 if sys.argv[1] == "aggtest":
     values = { 
         'device_id': arn,
@@ -35,11 +33,10 @@ if sys.argv[1] == "reagg":
     # But that breaks a lot of the architecture, so let's just be inefficient.
 
     values = {"device_id": arn}
-    firstMinute = aggregate.MinuteBucket(firstTime, values)
-    firstHour = aggregate.HourBucket(firstTime, firstMinute, values)
-    # firstDay = aggregate.DayBucket(firstTime, firstHour, values)
-    # firstMonth = aggregate.MonthBucket(firstTime, firstDay, values)
-    # firstYear = aggregate.YearBucket(firstTime, firstMonth, values)
+    #startTime = firstTime
+    startTime = datetime(2018,5,27,0,0,0, tzinfo=timezone.utc)
+    firstMinute = aggregate.MinuteBucket(startTime, values)
+    firstHour = aggregate.HourBucket(startTime, firstMinute, values)
 
     minute = firstMinute
     prevHour = None
@@ -47,6 +44,7 @@ if sys.argv[1] == "reagg":
         hour = minute.AggTo(minute.EventTime, minute, values)
         if prevHour is None or prevHour.BucketID() != hour.BucketID():
             # This is a new bucket, process and cascade
+            print("Processing " + hour.BucketID())
             hour.ProcessEvent()
             prevHour = hour
             #time.sleep(1)
@@ -54,6 +52,17 @@ if sys.argv[1] == "reagg":
         minute = aggregate.MinuteBucket(minute.NextBucketStart(), values)
         
 
+if sys.argv[1] == "missingdata":
+    #2018-05-28T03:14Z
+	
+    #cost 0.01657178643891232
+    #amps 30.98572685934019
+    #volts 242
+    #WH 124.97576499933876
+	
+	
+    #2018-05-28T03:26Z
+    pass
     
 
 
