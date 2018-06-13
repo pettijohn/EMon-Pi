@@ -2,3 +2,4 @@
 hardware/certificates/*
 lambda/amazon/*
 lambda/amazon.ion/*
+awslambda/pytz*
