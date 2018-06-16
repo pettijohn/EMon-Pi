@@ -93,6 +93,19 @@ assert dstmo.NextBucketStart() == datetime(2018,12,1,8,0, tzinfo=pytz.utc)
 assert dstmo.CountInBucket() == 30
 assert type(dstmo.CountInBucket()) == int
 
+
+localYesterday = datetime(2018,6,16,0,0,0, tzinfo=pytz.utc)
+
+mb = MinuteBucket(localYesterday, {})
+assert mb.BucketID() == "2018-06-16T00:00+0000" # UTC
+
+hb = HourBucket(localYesterday, mb, {})
+assert hb.BucketID() == "2018-06-16T00:00+0000" # UTC
+
+db = DayBucket(localYesterday, hb, {})
+assert db.BucketID() == "2018-06-15T00:00-0700" # Local
+
+
 # TODO - add fall back case 
 
 # Override the dynamo table with mock for testing

@@ -15,17 +15,18 @@ endTime = datetime.utcnow().replace(tzinfo=timezone.utc)
 if sys.argv[1] == "aggtest":
     values = { 
         'device_id': arn,
-        "current": Decimal(0),
+        "amps": Decimal(0),
         "volts": Decimal(0),
         "watt_hours": Decimal(0),
         "cost_usd": Decimal(0)
     }
 
     #time = datetime.utcnow() - timedelta(hours=1)
-    time = datetime(2018,5,22,0,0,0, tzinfo=timezone.utc)
+    time = datetime(2018,6,16,0,0,0, tzinfo=timezone.utc)
     minute = aggregate.MinuteBucket(time, values)
-    hour = aggregate.HourBucket(time, minute, values)
-    aggd = hour.ProcessEvent()
+    aggd = minute.ProcessEvent()
+    #hour = aggregate.HourBucket(time, minute, values)
+    #aggd = hour.ProcessEvent()
     #items = hour.GetChildren()
 
 if sys.argv[1] == "reagg":
@@ -41,15 +42,11 @@ if sys.argv[1] == "reagg":
     minute = firstMinute
     prevHour = None
     while minute.BucketStartTime() < endTime:
-        hour = minute.AggTo(minute.EventTime, minute, values)
-        if prevHour is None or prevHour.BucketID() != hour.BucketID():
-            # This is a new bucket, process and cascade
-            print("Processing " + hour.BucketID())
-            hour.ProcessEvent()
-            prevHour = hour
-            #time.sleep(1)
+        # This will also migrate to the new bucket ID format
+        minute.ProcessEvent()
         # Advance the minute and repeat 
         minute = aggregate.MinuteBucket(minute.NextBucketStart(), values)
+        
         
 
 if sys.argv[1] == "missingdata":
@@ -79,7 +76,7 @@ if sys.argv[1] == "fix":
         KeyConditionExpression=Key('device_id').eq(arn) & Key('bucket_id').lt(lastInvalid)
     )['Items']
     for i in items:
-        current = i['current']
+        current = i['amps']
         assert type(current) == Decimal
         voltage = Decimal('242.0')
         wattHours = current*voltage/60
@@ -90,16 +87,16 @@ if sys.argv[1] == "fix":
                 'device_id': arn,
                 'bucket_id': i['bucket_id']
             },
-            UpdateExpression="set #c=:c, volts=:v, watt_hours=:w, cost_usd=:u",
+            UpdateExpression="set amps=:a, volts=:v, watt_hours=:w, cost_usd=:u",
             ExpressionAttributeValues={
-                ':c': current,
+                ':a': current,
                 ':v': voltage,
                 ':w': wattHours,
                 ':u': costUsd
             },
-            ExpressionAttributeNames={
-                "#c":"current"
-            },
+            # ExpressionAttributeNames={
+            #     "#c":"current"
+            # },
             ReturnValues="UPDATED_NEW"
         )
         print(i)

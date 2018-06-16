@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta#, timezone
+from datetime import datetime, timedelta
 from pytz import timezone
 import pytz
 from collections import OrderedDict
@@ -19,7 +19,6 @@ class MockTable:
     def put_item(self, **kwargs):
         print(kwargs)
 
-
 class BucketRule:
     """ Defines a rule for bucketing by time windows, e.g. minute, day, year """
 
@@ -36,8 +35,6 @@ class BucketRule:
         self.EventTime = eventTime
         self.Values = values
         self.TimeFormat = "%Y-%m-%dT%H:%M%z"
-        # self.UtcTimeFormat = "%Y-%m-%dT%H:%MZ"
-        # self.LocalTimeFormat = "%Y-%m-%dT%H:%M%z"
 
     def BucketID(self) -> str:
         """ ID used in underlying storage, the start of the bucket's time window """
@@ -67,12 +64,16 @@ class BucketRule:
 
     def GetChildren(self):
         # Find the start and end bucket IDs for this bucket
-        childStart = self.BucketID()
-        childEnd = self.BucketEndTime().strftime(self.AggedFrom.BucketFormat)
+        childStartTime = self.BucketStartTime()
+        childEndTime = self.BucketEndTime()
+        # By using the bucket ID logic from the agged-from class for each time
+        childStartBucket = type(self.AggedFrom)(childStartTime).BucketID()
+        childEndBucket = type(self.AggedFrom)(childEndTime).BucketID()
+
         # The child bucket
         childTable = self.GetTable(self.AggedFrom.TableSuffix)
         children = childTable.query(
-            KeyConditionExpression=Key('device_id').eq(self.Values['device_id']) & Key('bucket_id').between(childStart, childEnd)
+            KeyConditionExpression=Key('device_id').eq(self.Values['device_id']) & Key('bucket_id').between(childStartBucket, childEndBucket)
         )
         return children['Items']
         #return children
@@ -92,7 +93,7 @@ class BucketRule:
             item = { 
                 'device_id': self.Values['device_id'],
                 'bucket_id': self.BucketID(),
-                "current": Decimal(0),
+                "amps": Decimal(0),
                 "volts": Decimal(0),
                 "watt_hours": Decimal(0),
                 "cost_usd": Decimal(0)
@@ -100,18 +101,18 @@ class BucketRule:
 
         # Get all of the constituent rows
         childRows = self.GetChildren()
-        if len(childRows) != self.CountInBucket():
+        if len(childRows) != self.CountInBucket() and self.TableSuffix == "Hour":
             print("WARN: Bucket {0} {1} has {2} children, expected {3}".format(self.TableSuffix, self.BucketID(), len(childRows), self.CountInBucket()))
 
         # Update by averaging or summing 
         # Recompute each one by selecting all of its children
         # Selecting and re-agg'ing is self-healing and better than trying to only incrementally update
-        item['current'] = sum(map(lambda i: i['current'], childRows)) / self.CountInBucket()
+        # FIXME amps and current both until reagg completes
+        # item['amps'] = sum(map(lambda i: i['amps'], childRows)) / self.CountInBucket()
+        item['amps'] = sum(map(lambda i: i['amps'] if 'amps' in i else i['current'], childRows)) / self.CountInBucket()
         item['volts'] = sum(map(lambda i: i['volts'], childRows)) / self.CountInBucket()
         item['watt_hours'] = sum(map(lambda i: i['watt_hours'], childRows))
         item['cost_usd'] = sum(map(lambda i: i['cost_usd'], childRows))
-        # if not chain:
-        #     return item
 
         table = self.GetTable(self.TableSuffix)
         results = None
@@ -123,18 +124,12 @@ class BucketRule:
                     'device_id': item['device_id'],
                     'bucket_id': item['bucket_id']
                 },
-                UpdateExpression="set #c=:c, volts=:v, watt_hours=:w, cost_usd=:u",
+                UpdateExpression="set amps=:a, volts=:v, watt_hours=:w, cost_usd=:u",
                 ExpressionAttributeValues={
-                    ':c': item['current'],
+                    ':a': item['amps'],
                     ':v': item['volts'],
                     ':w': item['watt_hours'],
                     ':u': item['cost_usd']
-                },
-                ExpressionAttributeNames={
-                    # CURRENT is a reserved word in DynamoDB
-                    # https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ExpressionAttributeNames.html
-                    # https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html 
-                    "#c":"current"
                 },
                 ReturnValues="UPDATED_NEW"
             )
@@ -146,11 +141,13 @@ class BucketRule:
         else:
             return results
         
-    def GetItem(self) -> dict:
+    def GetItem(self, bucketID = None) -> dict:
         """ Returns the item from the this bucket table """
+        if bucketID == None:
+            bucketID = self.BucketID()
         table = self.GetTable(self.TableSuffix)
         
-        self.Values['bucket_id'] = self.BucketID()
+        self.Values['bucket_id'] = bucketID
         response = table.get_item(
             Key={
                 'device_id': self.Values['device_id'],
@@ -173,10 +170,11 @@ class EndViaDuration():
         return super().BucketStartTime() + self.BucketDuration() - self.AggedFrom.BucketDuration()
 
 class MinuteBucket(EndViaFormatBucket, BucketRule):
-    def __init__(self, eventTime: datetime, values: dict):
+    def __init__(self, eventTime: datetime, values: dict=None):
         super().__init__(eventTime, None, values)
         self.TableSuffix = "Minute"
         self.BucketFormat = "%Y-%m-%dT%H:%M%z"
+        self.LegacyBucketFormat = "%Y-%m-%dT%H:%MZ"
         self.AggTo = HourBucket
 
     def CountInBucket(self) -> int:
@@ -189,13 +187,28 @@ class MinuteBucket(EndViaFormatBucket, BucketRule):
         return self.BucketStartTime() + timedelta(minutes=1)
 
     def ProcessEvent(self, chain=True):
+        # See if there is an existing item 
         item = self.GetItem()
-        if item is not None:
-            # Got a matching row
-            # This is an error for Minute bucket, but let's just log and ignore
-            print("Error - found row that shouldn't exist with values {0} ...... Skiping writing {1}".format(str(item), str(self.Values)))
-        else:
-            table = self.GetTable(self.TableSuffix)
+        table = self.GetTable(self.TableSuffix)
+        # FIXME - get rid of legacy bucket ID check & migration
+        if item is None:
+            # Check for legacy bucket ID
+            legacyID = self.EventTime.strftime(self.LegacyBucketFormat)
+            item = self.GetItem(legacyID)
+            if item is not None:
+                # Found legacy - migrate it
+                # We use a new bucket ID format and use 'amps' instead of 
+                # 'current' because the latter is a reserved word in dynamodb
+                item['bucket_id'] = self.BucketID()
+                item['amps'] = item.pop('current')
+                table.put_item(Item=item)
+                table.delete_item(Key={
+                        'device_id': item['device_id'],
+                        'bucket_id': legacyID
+                    })
+
+        if item is None:
+            # If still none, insert
             results = table.put_item(Item=self.Values)
             
         if chain and self.AggTo is not None and type(self.AggTo) != BucketRule:
@@ -206,7 +219,7 @@ class MinuteBucket(EndViaFormatBucket, BucketRule):
             return results
 
 class HourBucket(EndViaFormatBucket, BucketRule):
-    def __init__(self, eventTime: datetime, aggedFrom: BucketRule, values: dict):
+    def __init__(self, eventTime: datetime, aggedFrom: BucketRule=None, values: dict=None):
         super().__init__(eventTime, aggedFrom, values)
         self.TableSuffix = "Hour"
         self.BucketFormat = "%Y-%m-%dT%H:00%z"
@@ -256,13 +269,15 @@ class LocalBucketRule():
     def BucketID(self) -> str:
         """ ID used in underlying storage, the start of the bucket's time window """
         # Get the start time of the bucket for proper time zone
-        bucketStartNaive = datetime.strptime(self.EventTime.strftime(self.BucketFormat), self.BucketFormat).replace(tzinfo=None)
+        # First, get the local time in case it moves to a different bucket (such as yesterday)
+        localEvent = self.EventTime.astimezone(self.DeviceTimeZone())
+        # Then chop off the time zone, find the bucket start, and format in the proper time zone
+        bucketStartNaive = datetime.strptime(localEvent.strftime(self.BucketFormat), self.BucketFormat).replace(tzinfo=None)
         bucketStartLocal = self.DeviceTimeZone().localize(bucketStartNaive)
-        
         return bucketStartLocal.strftime(self.BucketFormat)
 
 class DayBucket(LocalBucketRule, EndViaFormatBucket, BucketRule):
-    def __init__(self, eventTime: datetime, aggedFrom: BucketRule, values: dict):
+    def __init__(self, eventTime: datetime, aggedFrom: BucketRule=None, values: dict=None):
         super().__init__(eventTime, aggedFrom, values)
         self.TableSuffix = "Day"
         self.BucketFormat = "%Y-%m-%dT00:00%z"
@@ -279,7 +294,7 @@ class DayBucket(LocalBucketRule, EndViaFormatBucket, BucketRule):
         return timedelta(days=1)
 
 class MonthBucket(LocalBucketRule, EndViaDuration, BucketRule):
-    def __init__(self, eventTime: datetime, aggedFrom: BucketRule, values: dict):
+    def __init__(self, eventTime: datetime, aggedFrom: BucketRule=None, values: dict=None):
         super().__init__(eventTime, aggedFrom, values)
         self.TableSuffix = "Month"
         self.BucketFormat = "%Y-%m-01T00:00%z"
@@ -290,7 +305,6 @@ class MonthBucket(LocalBucketRule, EndViaDuration, BucketRule):
         return self.BucketEndTime() + self.AggedFrom.BucketDuration()
 
     def CountInBucket(self) -> int:
-        #return int((self.BucketEndTime() - self.BucketStartTime()).days + 1)
         # Use seconds and rounding accont for 30.958 day month when daylight saving time starts and 30.052 when ends
         return int(round((self.BucketEndTime() - self.BucketStartTime()).total_seconds()/60/60/24)+1)
 
@@ -298,7 +312,7 @@ class MonthBucket(LocalBucketRule, EndViaDuration, BucketRule):
         return monthdelta(1)
 
 class YearBucket(LocalBucketRule, EndViaFormatBucket, BucketRule):
-    def __init__(self, eventTime: datetime, aggedFrom: BucketRule, values: dict):
+    def __init__(self, eventTime: datetime, aggedFrom: BucketRule=None, values: dict=None):
         super().__init__(eventTime, aggedFrom, values)
         self.TableSuffix = "Year"
         self.BucketFormat = "%Y-01-01T00:00%z"
@@ -313,6 +327,3 @@ class YearBucket(LocalBucketRule, EndViaFormatBucket, BucketRule):
 
     def BucketDuration(self) -> timedelta:
         return monthdelta(12)
-
-
-
