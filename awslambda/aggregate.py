@@ -35,14 +35,17 @@ class BucketRule:
         self.AggTo = BucketRule # Callable class to chain for next level aggregation
         self.EventTime = eventTime
         self.Values = values
-        self.UtcTimeFormat = "%Y-%m-%dT%H:%MZ"
-        self.LocalTimeFormat = "%Y-%m-%dT%H:%M%z"
+        self.TimeFormat = "%Y-%m-%dT%H:%M%z"
+        # self.UtcTimeFormat = "%Y-%m-%dT%H:%MZ"
+        # self.LocalTimeFormat = "%Y-%m-%dT%H:%M%z"
 
     def BucketID(self) -> str:
         """ ID used in underlying storage, the start of the bucket's time window """
         return self.EventTime.strftime(self.BucketFormat)
+
     def BucketStartTime(self) -> datetime:
         return datetime.strptime(self.BucketID(), self.BucketFormat).replace(tzinfo=pytz.utc)
+
     def BucketEndTime(self) -> datetime:
         """ Bucket end time, INCLUSIVE. Must go to end of child bucket. """ 
         # Subclass must implement because Month can't be string formatted
@@ -163,13 +166,17 @@ class EndViaFormatBucket():
     def BucketEndTime(self) -> datetime:
         """ For subclasses that can compute the last bucket with format (i.e. everything but Month) """
         # EventTime is UTC, so LocalTimeFormat parses with +0000
-        return datetime.strptime(self.EventTime.strftime(self.BucketEndFormat), self.LocalTimeFormat).replace(tzinfo=pytz.utc)
+        return datetime.strptime(self.EventTime.strftime(self.BucketEndFormat), self.TimeFormat).replace(tzinfo=pytz.utc)
         
+class EndViaDuration():
+    def BucketEndTime(self) -> datetime:
+        return super().BucketStartTime() + self.BucketDuration() - self.AggedFrom.BucketDuration()
+
 class MinuteBucket(EndViaFormatBucket, BucketRule):
     def __init__(self, eventTime: datetime, values: dict):
         super().__init__(eventTime, None, values)
         self.TableSuffix = "Minute"
-        self.BucketFormat = "%Y-%m-%dT%H:%MZ"
+        self.BucketFormat = "%Y-%m-%dT%H:%M%z"
         self.AggTo = HourBucket
 
     def CountInBucket(self) -> int:
@@ -202,8 +209,8 @@ class HourBucket(EndViaFormatBucket, BucketRule):
     def __init__(self, eventTime: datetime, aggedFrom: BucketRule, values: dict):
         super().__init__(eventTime, aggedFrom, values)
         self.TableSuffix = "Hour"
-        self.BucketFormat = "%Y-%m-%dT%H:00Z"
-        self.BucketEndFormat = "%Y-%m-%dT%H:59Z"
+        self.BucketFormat = "%Y-%m-%dT%H:00%z"
+        self.BucketEndFormat = "%Y-%m-%dT%H:59%z"
         self.AggTo = DayBucket
 
     def BucketDuration(self) -> timedelta:
@@ -215,56 +222,46 @@ class HourBucket(EndViaFormatBucket, BucketRule):
     def CountInBucket(self) -> int:
         return int((self.BucketEndTime() - self.BucketStartTime()).total_seconds()/60 + 1)
 
-class LocalBucketRule(BucketRule):
+class LocalBucketRule():
+    def DeviceTimeZone(self):
+        # TODO extract to a lookup table if I ever have more than one device
+        return pytz.timezone("America/Los_Angeles") 
+
     """ A timezone-aware bucket rule. Currently hard-coded to America/Los_Angeles """
     def BucketStartStop(self):
         # Fancy time zone logic:
         # Minute and Hour are in UTC
         # Everything else is in local time. Days in particular benefit from local 
         # time for user comprehension. 
-        # TODO extract to a lookup table if I ever have more than one device
-        deviceTimeZone = pytz.timezone("America/Los_Angeles") 
-
-        # For the event date (UTC), identify it in local time.
-        localEventTime = self.EventTime.astimezone(deviceTimeZone)
-
-        # Use that as the bucket ID. If it's tomorrow UTC, it'll still be Today's local bucket
-        localBucketID = localEventTime.strftime(self.BucketFormat)
-        # Find the local start & stop times
-        localStart = datetime.strptime(localBucketID, self.BucketFormat)
         
-        #localStart = deviceTimeZone.normalize(deviceTimeZone.localize(parsedStart))
-        localEnd = self.BucketEndTime()
-        # localEnd = deviceTimeZone.normalize(localStart + self.BucketDuration() - self.AggedFrom.BucketDuration()) # Do I need to normalize? 
-        # if localEnd.dst() != localStart.dst() and localEnd.dst() == self.AggedFrom.BucketDuration():
-        #     # Special case - timedelta(days=1) does not account for 23 and 25 hour DST days
-        #     if localEnd.dst() > localStart.dst():
-        #         # DST start
-        #         localEnd = deviceTimeZone.normalize(localEnd - localEnd.dst())
-        #     else:
-        #         # DST end
-        #         localEnd = deviceTimeZone.normalize(localEnd + localEnd.dst())
-        # Identify the UTC start and stop of that day
+        # Find the local start & stop times. BucketID includes offset. 
+        localStart = datetime.strptime(self.BucketID(), self.BucketFormat)        
+        baseEnd = super().BucketEndTime().replace(tzinfo=None)
+        localEnd = self.DeviceTimeZone().localize(baseEnd)
+        
+        # Convert to UTC
         utcStart = localStart.astimezone(pytz.utc)
         utcEnd = localEnd.astimezone(pytz.utc)
+
         return utcStart, utcEnd
 
     def BucketStartTime(self) -> datetime:
         utcStart, utcEnd = self.BucketStartStop()
         return utcStart
 
-    # def BucketEndTime(self) -> datetime:
-    #     utcStart, utcEnd = self.BucketStartStop()
-    #     return utcEnd      
+    def BucketEndTime(self) -> datetime:
+        utcStart, utcEnd = self.BucketStartStop()
+        return utcEnd      
 
     def BucketID(self) -> str:
         """ ID used in underlying storage, the start of the bucket's time window """
-        deviceTimeZone = pytz.timezone("America/Los_Angeles") 
-        localEventTime = self.EventTime.astimezone(deviceTimeZone)
+        # Get the start time of the bucket for proper time zone
+        bucketStartNaive = datetime.strptime(self.EventTime.strftime(self.BucketFormat), self.BucketFormat).replace(tzinfo=None)
+        bucketStartLocal = self.DeviceTimeZone().localize(bucketStartNaive)
+        
+        return bucketStartLocal.strftime(self.BucketFormat)
 
-        return localEventTime.strftime(self.BucketFormat)
-
-class DayBucket(EndViaFormatBucket, LocalBucketRule):
+class DayBucket(LocalBucketRule, EndViaFormatBucket, BucketRule):
     def __init__(self, eventTime: datetime, aggedFrom: BucketRule, values: dict):
         super().__init__(eventTime, aggedFrom, values)
         self.TableSuffix = "Day"
@@ -281,28 +278,31 @@ class DayBucket(EndViaFormatBucket, LocalBucketRule):
     def BucketDuration(self) -> timedelta:
         return timedelta(days=1)
 
-class MonthBucket(EndViaFormatBucket, LocalBucketRule):
+class MonthBucket(LocalBucketRule, EndViaDuration, BucketRule):
     def __init__(self, eventTime: datetime, aggedFrom: BucketRule, values: dict):
         super().__init__(eventTime, aggedFrom, values)
         self.TableSuffix = "Month"
-        self.BucketFormat = "%Y-%m-01T00:00Z"
+        self.BucketFormat = "%Y-%m-01T00:00%z"
         self.AggTo = YearBucket
 
     def NextBucketStart(self) -> timedelta:
-        return self.BucketStartTime() + monthdelta(1)
+        #return self.BucketStartTime() + monthdelta(1)
+        return self.BucketEndTime() + self.AggedFrom.BucketDuration()
 
     def CountInBucket(self) -> int:
-        return int((self.BucketEndTime() - self.BucketStartTime()).days + 1)
+        #return int((self.BucketEndTime() - self.BucketStartTime()).days + 1)
+        # Use seconds and rounding accont for 30.958 day month when daylight saving time starts and 30.052 when ends
+        return int(round((self.BucketEndTime() - self.BucketStartTime()).total_seconds()/60/60/24)+1)
 
     def BucketDuration(self) -> timedelta:
         return monthdelta(1)
 
-class YearBucket(EndViaFormatBucket, LocalBucketRule):
+class YearBucket(LocalBucketRule, EndViaFormatBucket, BucketRule):
     def __init__(self, eventTime: datetime, aggedFrom: BucketRule, values: dict):
         super().__init__(eventTime, aggedFrom, values)
         self.TableSuffix = "Year"
         self.BucketFormat = "%Y-01-01T00:00%z"
-        self.BucketEndFormat = "%Y-12-31T00:00%z"
+        self.BucketEndFormat = "%Y-12-01T00:00%z"
         self.AggTo = None
 
     def NextBucketStart(self) -> timedelta:
@@ -315,86 +315,4 @@ class YearBucket(EndViaFormatBucket, LocalBucketRule):
         return monthdelta(12)
 
 
-# Tests
-if (__name__ == "__main__"):
-    baseCase     = datetime(2018,5,5,13,39,12, tzinfo=pytz.utc)
-    leapyearCase = datetime(2016,2,29,13,39,12, tzinfo=pytz.utc)
 
-    mb = MinuteBucket(baseCase, {})
-    assert mb.BucketID() == "2018-05-05T13:39Z" # UTC
-    #assert mb.BucketEndTime() == datetime(2018,5,5,13,39,59, tzinfo=pytz.utc)
-    assert mb.NextBucketStart() == datetime(2018,5,5,13,40,0, tzinfo=pytz.utc)
-    assert mb.CountInBucket() == 1
-    assert type(mb.CountInBucket()) == int
-
-    hb = HourBucket(baseCase, mb, {})
-    assert hb.BucketID() == "2018-05-05T13:00Z" # UTC
-    assert hb.BucketEndTime() == datetime(2018,5,5,13,59, tzinfo=pytz.utc)
-    assert hb.NextBucketStart() == datetime(2018,5,5,14,00, tzinfo=pytz.utc)
-    assert hb.CountInBucket() == 60
-    assert type(hb.CountInBucket()) == int
-
-    db = DayBucket(baseCase, hb, {})
-    assert db.BucketID() == "2018-05-05T00:00-0700" # Local
-    assert db.BucketStartTime() == datetime(2018,5,5,7,0, tzinfo=pytz.utc)
-    assert db.BucketEndTime()   == datetime(2018,5,6,6,0, tzinfo=pytz.utc)
-    assert db.NextBucketStart() == datetime(2018,5,6,7,0, tzinfo=pytz.utc)
-    assert db.CountInBucket() == 24
-    assert type(db.CountInBucket()) == int
-
-    mt = MonthBucket(baseCase, db, {})
-    assert mt.BucketID() == "2018-05-01T00:00Z"
-    assert mt.BucketStartTime() == datetime(2018,5,1,7,0, tzinfo=pytz.utc)
-    assert mt.BucketEndTime()   == datetime(2018,5,31,7,0, tzinfo=pytz.utc)
-    assert mt.NextBucketStart() == datetime(2018,6,1,7,0, tzinfo=pytz.utc)
-    assert mt.CountInBucket() == 31
-    assert type(mt.CountInBucket()) == int
-
-    yb = YearBucket(baseCase, mt, {})
-    assert yb.BucketID() == "2018-01-01T00:00Z"
-    assert yb.BucketStartTime() == datetime(2018,1,1,8,0, tzinfo=pytz.utc)
-    assert yb.BucketEndTime()   == datetime(2018,12,1,8,0, tzinfo=pytz.utc)
-    assert yb.NextBucketStart() == datetime(2019,1,1,8,0, tzinfo=pytz.utc)
-    assert yb.CountInBucket() == 12
-    assert type(yb.CountInBucket()) == int
-
-    ml = MonthBucket(leapyearCase, DayBucket(leapyearCase, None, {}), {})
-    assert ml.BucketID() == "2016-02-01T00:00Z"
-    assert ml.BucketStartTime() == datetime(2016,2,1,8,0, tzinfo=pytz.utc)
-    assert ml.BucketEndTime()   == datetime(2016,2,29,8,0, tzinfo=pytz.utc)
-    assert ml.NextBucketStart() == datetime(2016,3,1,8,0, tzinfo=pytz.utc)
-    assert ml.CountInBucket() == 29
-    assert type(ml.CountInBucket()) == int
-
-    yl = YearBucket(leapyearCase, ml, {})
-    assert yl.BucketID() == "2016-01-01T00:00Z"
-    assert yl.BucketStartTime() == datetime(2016,1,1,8,0, tzinfo=pytz.utc)
-    assert yl.BucketEndTime()   == datetime(2016,12,1,8,0, tzinfo=pytz.utc)
-    assert yl.NextBucketStart() == datetime(2017,1,1,8,0, tzinfo=pytz.utc)
-    assert yl.CountInBucket() == 12
-    assert type(yl.CountInBucket()) == int
-
-    dstStartCase = datetime(2018,3,11,9,59,0, tzinfo=pytz.utc) # One minute before DST start
-    dst = DayBucket(dstStartCase, HourBucket(dstStartCase, None, {}), {})
-    assert dst.BucketID() == "2018-03-11T00:00Z"
-    assert dst.BucketStartTime() == datetime(2018,3,11,8,0, tzinfo=pytz.utc)
-    assert dst.BucketEndTime()   == datetime(2018,3,12,6,0, tzinfo=pytz.utc)
-    assert dst.NextBucketStart() == datetime(2018,3,12,7,0, tzinfo=pytz.utc)
-    assert dst.CountInBucket() == 23
-    assert type(dst.CountInBucket()) == int
-
-    # TODO - add fall back case 
-
-    # Override the dynamo table with mock for testing
-    BucketRule.GetTable = lambda self, tableName: MockTable(tableName)
-    #MockTable.get_item = lambda self,  **kwargs: {} # Should not be a matching row
-
-    # mb.ProcessEvent(
-    #     { "device_id": "TestEvent",
-    #         "bucket_id": baseCase.strftime("%Y-%m-%dT%H:%MZ"),
-    #         "current": Decimal('1.1'),
-    #         "volts": Decimal('242.0'),
-    #         "watt_hours": Decimal('266.2')/60,
-    #         "cost_usd": Decimal('266.2')/60*Decimal('0.1326')/Decimal(1000)
-    #     }
-    # )
