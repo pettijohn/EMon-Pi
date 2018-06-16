@@ -1,7 +1,7 @@
 import time
 import connect
 from decimal import Decimal
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from lcd_i2c import LcdSerialDisplay
 from ADC import ADC
 import json
@@ -37,16 +37,16 @@ try:
                 voltage = Decimal('242.0')
                 wattage = current*voltage
 
-                now = datetime.utcnow()
-                timeStr = now.strftime("%Y-%m-%dT%H:%M:%SZ") # floor of current second
-                minuteStr = now.strftime("%Y-%m-%dT%H:%M:00Z") # floor of current minute
-                nextSec = datetime.strptime(timeStr, "%Y-%m-%dT%H:%M:%SZ") + timedelta(seconds=1) #floor of next second
+                now = datetime.utcnow().replace(tzinfo=timezone.utc)
+                timeStr = now.strftime("%Y-%m-%dT%H:%M:%S%z") # floor of current second
+                minuteStr = now.strftime("%Y-%m-%dT%H:%M:00%z") # floor of current minute
+                nextSec = datetime.strptime(timeStr, "%Y-%m-%dT%H:%M:%S%z") + timedelta(seconds=1) #floor of next second
                 
                 # Print the ADC values.
                 #print('| {0:>+9.6f} | {1:>+9.6f} | {2:>+9.6f} | {3:>+9.6f} |'.format(*voltages))
                 
                 #display.print(list(map(lambda f: '{0:>+9.6f}'.format(f), voltages)))
-                display.print([timeStr,                    
+                display.print([timeStr[0:19],                    
                     '{0:>+9.6f} Amps'.format(current),
                     '{0:>+9.4f} Volts'.format(voltage),
                     '{0:>+9.6f} Watts'.format(wattage)])
@@ -59,12 +59,10 @@ try:
                     prevMinute = minuteStr
                     avgCurrent = sum(currentReadings) / len(currentReadings)
                     # Reset the array
-                    #print(currentReadings)
-                    #print(str(len(currentReadings)))
                     currentReadings = []
                     payload = { "device_id": arn,
-                        "bucket_id": now.strftime("%Y-%m-%dT%H:%MZ"),
-                        "current": (avgCurrent),
+                        "bucket_id": now.strftime("%Y-%m-%dT%H:%M%z"),
+                        "amps": (avgCurrent),
                         "volts": (voltage),
                         "watt_hours": avgCurrent*voltage/Decimal('60'),
                         "cost_usd": avgCurrent*voltage/Decimal('60')*rate
@@ -77,7 +75,7 @@ try:
 
 
                 # Pause until the next second.
-                pause = (nextSec - datetime.utcnow()).total_seconds()
+                pause = (nextSec - datetime.utcnow().replace(tzinfo=timezone.utc)).total_seconds()
                 if pause > 0:
                     time.sleep(pause)
                 # Else don't pause 
