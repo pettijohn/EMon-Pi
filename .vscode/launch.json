@@ -22,6 +22,15 @@
             ]
         },
         {
+            "name": "Python: AggTest",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\ops.py",
+            "args": [
+                "aggtest"
+            ]
+        },
+        {
             "name": "Python: Attach",
             "type": "python",
             "request": "attach",
