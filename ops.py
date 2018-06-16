@@ -30,15 +30,10 @@ if sys.argv[1] == "aggtest":
     #items = hour.GetChildren()
 
 if sys.argv[1] == "reagg":
-    # For reaggregation, process all of the hours, and then all of the days, and so on, up the stack. 
-    # But that breaks a lot of the architecture, so let's just be inefficient.
-
     values = {"device_id": arn}
-    #startTime = firstTime
-    startTime = datetime(2018,5,27,0,0,0, tzinfo=timezone.utc)
+    startTime = firstTime
     firstMinute = aggregate.MinuteBucket(startTime, values)
-    firstHour = aggregate.HourBucket(startTime, firstMinute, values)
-
+    
     minute = firstMinute
     prevHour = None
     while minute.BucketStartTime() < endTime:
@@ -46,6 +41,7 @@ if sys.argv[1] == "reagg":
         minute.ProcessEvent()
         # Advance the minute and repeat 
         minute = aggregate.MinuteBucket(minute.NextBucketStart(), values)
+        time.sleep(0.75)
         
         
 

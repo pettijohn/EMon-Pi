@@ -147,11 +147,10 @@ class BucketRule:
             bucketID = self.BucketID()
         table = self.GetTable(self.TableSuffix)
         
-        self.Values['bucket_id'] = bucketID
         response = table.get_item(
             Key={
                 'device_id': self.Values['device_id'],
-                'bucket_id': self.Values['bucket_id']
+                'bucket_id': bucketID
             }
         )
         if 'Item' in response:

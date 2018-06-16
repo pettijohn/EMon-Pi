@@ -1,11 +1,9 @@
 import boto3
-import copy
 from decimal import Decimal
 import json
-from amazon.ion import simpleion
-from io import StringIO
-import pickle
-#import aggregate
+import aggregate
+from datetime import datetime, timezone, timedelta
+import pytz
 
 # Helper class to convert a DynamoDB item to JSON.
 class DecimalEncoder(json.JSONEncoder):
@@ -20,46 +18,20 @@ class DecimalEncoder(json.JSONEncoder):
 def lambda_handler(event, context):
     event = json.loads(json.dumps(event, cls=DecimalEncoder), parse_float=Decimal)
 
-    dynamodb = boto3.resource('dynamodb')
-    table = dynamodb.Table('EnergyMonitor.Minute')
-    
-    return table.put_item(Item=event)
+    # Parse important fields
+    bucketFormat = "%Y-%m-%dT%H:%M%z"
+    time = datetime.strptime(event['bucket_id'], bucketFormat).replace(tzinfo=timezone.utc)
+    minute = aggregate.MinuteBucket(time, event)
+    minute.ProcessEvent()
 
-def GetItem(self, eventTime: datetime, values: dict) -> dict:
-    """ Returns the item from the this bucket table """
-    table = BucketRule.GetTable("EnergyMonitor." + self.TableSuffix)
-    
-    values['bucket_id'] = self.BucketID(eventTime)
-    response = table.get_item(
-        Key={
-            'device_id': values['device_id'],
-            'bucket_id': values['bucket_id']
-        }
-    )
-    if 'Item' in response:
-        return response['Item']
-    else:
-        return None
-        
+
 if __name__ == "__main__":
-    arn = "TestMessages"
-    current = Decimal(str(0.002))
-    volts = Decimal(str(242.0))
-    rate = Decimal(str(0.1326))
-    payload = { "device_id": arn,
-        "bucket_id": "2018-05-09T19:57Z",
-        "current": (current),
-        "volts": (volts),
-        "watt_hours": (Decimal(str(current*volts/60))),
-        "cost_usd": Decimal(str(current*volts/60*rate))
+    time = datetime.utcnow().replace(tzinfo=timezone.utc) + timedelta(5) # work in the future 
+    payload = { "device_id": "arn:aws:iot:us-east-1:422446087002:thing/EMonPi",
+        "bucket_id": time.strftime("%Y-%m-%dT%H:%M%z"),
+        "amps": Decimal('0'),
+        "volts": Decimal('242.0'),
+        "watt_hours": Decimal('60'),
+        "cost_usd": Decimal('60')
     }
-
-    # t = aggregate.Table('EnergyMonitor.Minute', aggregate.AllBuckets.MinuteBucket)
-    # t.ProcessRow(payload)
-    
-
     lambda_handler(payload, None)
-
-
-
-
