@@ -27,6 +27,9 @@ Run `aws configure` and enter the access key for an IAM user with the necessary 
 * Missing Data
  * 2018-05-28T03
  * 2018-06-02T07
+ * For every hour, identify <60 minutes, interpolate and insert.
 * Update Lambda function to aggregate on write
 * Build Fetch API that is timezone aware
 * Make app boot on Pi
+* Run reagg in an EC2 host
+* Hardware client - batch into 5min uploads. Flush on keyboardInterrupt. 
