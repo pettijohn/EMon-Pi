@@ -48,6 +48,7 @@ if sys.argv[1] == "reagg":
 
         for item in items:
             bucketToReAgg = item['bucket_id']
+            print(bucketToReAgg)
             eventTime = datetime.strptime(bucketToReAgg, "%Y-%m-%dT%H:%MZ")
             values = { 
                 'device_id': arn,
