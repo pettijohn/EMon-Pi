@@ -24,7 +24,7 @@ class BucketRule:
 
     """ Func to get a table. Dynamo by default. Can be swapped out for mock table. """
     def GetTable(self, tableSuffix):
-        return boto3.resource('dynamodb').Table("EnergyMonitor." + tableSuffix)
+        return boto3.resource('dynamodb', region_name='us-east-1').Table("EnergyMonitor." + tableSuffix)
         
     def __init__(self, eventTime: datetime, aggedFrom, values: dict):
         """ Table is EnergyMonitor.<TableSuffix> """
