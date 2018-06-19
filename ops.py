@@ -49,14 +49,16 @@ if sys.argv[1] == "reagg":
         for item in items:
             bucketToReAgg = item['bucket_id']
             print(bucketToReAgg)
-            eventTime = datetime.strptime(bucketToReAgg, "%Y-%m-%dT%H:%MZ")
+            eventTime = datetime.strptime(bucketToReAgg, "%Y-%m-%dT%H:%MZ").replace(tzinfo=timezone.utc)
             values = { 
                 'device_id': arn,
-                'bucket_id': bucketToReAgg
+                #'bucket_id': bucketToReAgg
             }
 
             minute = aggregate.MinuteBucket(eventTime, values)
-            aggd = minute.ProcessEvent(True, False)
+            aggd = minute.ProcessEvent(False, False)
+            time.sleep(0.1)
+        print(".")
 
 if sys.argv[1] == "reaggiot":
     print("Connecting IoT client")

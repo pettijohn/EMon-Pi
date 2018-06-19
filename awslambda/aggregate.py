@@ -206,7 +206,18 @@ class MinuteBucket(EndViaFormatBucket, BucketRule):
                         'device_id': item['device_id'],
                         'bucket_id': legacyID
                     })
+        else:
+            # If we find the new row, check also for the legacy row and delete it
+            legacyID = self.EventTime.strftime(self.LegacyBucketFormat)
+            item = self.GetItem(legacyID)
+            if item is not None:
+                table.delete_item(Key={
+                        'device_id': item['device_id'],
+                        'bucket_id': legacyID
+                    })
 
+
+        results = None
         if item is None and doInsert:
             # If still none, insert. Wo don't insert when re-aggregating. 
             results = table.put_item(Item=self.Values)
