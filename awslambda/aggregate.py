@@ -151,7 +151,8 @@ class BucketRule:
             Key={
                 'device_id': self.Values['device_id'],
                 'bucket_id': bucketID
-            }
+            },
+            ConsistentRead=True #2018-05-28T00
         )
         if 'Item' in response:
             return response['Item']
@@ -185,7 +186,7 @@ class MinuteBucket(EndViaFormatBucket, BucketRule):
     def NextBucketStart(self) -> timedelta:
         return self.BucketStartTime() + timedelta(minutes=1)
 
-    def ProcessEvent(self, chain=True):
+    def ProcessEvent(self, chain=True, doInsert=True):
         # See if there is an existing item 
         item = self.GetItem()
         table = self.GetTable(self.TableSuffix)
@@ -206,8 +207,8 @@ class MinuteBucket(EndViaFormatBucket, BucketRule):
                         'bucket_id': legacyID
                     })
 
-        if item is None:
-            # If still none, insert
+        if item is None and doInsert:
+            # If still none, insert. Wo don't insert when re-aggregating. 
             results = table.put_item(Item=self.Values)
             
         if chain and self.AggTo is not None and type(self.AggTo) != BucketRule:

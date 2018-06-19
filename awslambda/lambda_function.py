@@ -15,15 +15,20 @@ class DecimalEncoder(json.JSONEncoder):
                 return int(o)
         return super(DecimalEncoder, self).default(o)
         
+
+bucketFormat = "%Y-%m-%dT%H:%M%z"
+
 def lambda_handler(event, context):
     event = json.loads(json.dumps(event, cls=DecimalEncoder), parse_float=Decimal)
 
-    # Parse important fields
-    bucketFormat = "%Y-%m-%dT%H:%M%z"
+    # Parse important fields and create bucket
     time = datetime.strptime(event['bucket_id'], bucketFormat).replace(tzinfo=timezone.utc)
     minute = aggregate.MinuteBucket(time, event)
-    minute.ProcessEvent()
-
+    if 'action' in event and event['action'] == "reagg":
+        minute.ProcessEvent(doInsert=False)
+    else:
+        # regular insert event
+        minute.ProcessEvent()
 
 if __name__ == "__main__":
     time = datetime.utcnow().replace(tzinfo=timezone.utc) + timedelta(5) # work in the future 

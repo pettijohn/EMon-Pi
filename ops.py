@@ -5,10 +5,12 @@ from datetime import datetime, timedelta, timezone
 import time
 from decimal import Decimal
 import boto3
+import json
 from boto3.dynamodb.conditions import Key, Attr
+from hardware import connect
 
 arn = "arn:aws:iot:us-east-1:422446087002:thing/EMonPi"
-firstBucket = "2018-05-13T03:58Z"
+firstBucket = "2018-05-13T03:58+0000"
 firstTime = datetime(2018,5,13,3,58,0, tzinfo=timezone.utc)
 endTime = datetime.utcnow().replace(tzinfo=timezone.utc)
 
@@ -22,7 +24,7 @@ if sys.argv[1] == "aggtest":
     }
 
     #time = datetime.utcnow() - timedelta(hours=1)
-    time = datetime(2018,6,16,0,0,0, tzinfo=timezone.utc)
+    time = datetime(2018,5,24,8,0,0, tzinfo=timezone.utc)
     minute = aggregate.MinuteBucket(time, values)
     aggd = minute.ProcessEvent()
     #hour = aggregate.HourBucket(time, minute, values)
@@ -30,19 +32,67 @@ if sys.argv[1] == "aggtest":
     #items = hour.GetChildren()
 
 if sys.argv[1] == "reagg":
-    values = {"device_id": arn}
-    startTime = firstTime
-    firstMinute = aggregate.MinuteBucket(startTime, values)
-    
+    dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    table = dynamodb.Table('EnergyMonitor.Minute')
+
+    while True:
+        response = table.scan(
+            FilterExpression=Attr("bucket_id").contains("Z"),
+            ProjectionExpression="bucket_id",
+            ConsistentRead=True 
+            )
+
+        items = response['Items']
+        if len(items) < 1:
+            quit()
+
+        for item in items:
+            bucketToReAgg = item['bucket_id']
+            eventTime = datetime.strptime(bucketToReAgg, "%Y-%m-%dT%H:%MZ")
+            values = { 
+                'device_id': arn,
+                'bucket_id': bucketToReAgg
+            }
+
+            minute = aggregate.MinuteBucket(eventTime, values)
+            aggd = minute.ProcessEvent(True, False)
+
+if sys.argv[1] == "reaggiot":
+    print("Connecting IoT client")
+    client = connect.Client(arn)
+
+    startTime = datetime(2018,5,22,17,6,0, tzinfo=timezone.utc)
+    firstMinute = aggregate.MinuteBucket(startTime, {})
     minute = firstMinute
-    prevHour = None
-    while minute.BucketStartTime() < endTime:
-        # This will also migrate to the new bucket ID format
-        minute.ProcessEvent()
-        # Advance the minute and repeat 
-        minute = aggregate.MinuteBucket(minute.NextBucketStart(), values)
-        time.sleep(0.75)
+    while minute.BucketStartTime() < datetime(2018,6,16,23,0,0, tzinfo=timezone.utc):
         
+        payload = { 
+            "device_id": arn,
+            "bucket_id": minute.BucketID(),
+            "action": "reagg"
+        }
+        print(minute.BucketID())
+        strPayload = json.dumps(payload)
+        client.publish("EnergyReading/Minute", strPayload, 1)
+
+        # Advance the minute and repeat 
+        minute = aggregate.MinuteBucket(minute.NextBucketStart(), {})
+        time.sleep(1)
+        # Capacity Read Write
+        # Min 10 4
+        # Hour 5 5 
+        # Day 4 5
+        # Month 3 3
+        # Year 2 2
+        
+    client.disconnect()    
+        
+if sys.argv[1] == "fix":
+    pass
+    # identify all minutes containing 'Z' in bucket ID
+    # or where current <> null
+    # Reagg/migrate them
+    # Then, for all hours, reagg
         
 
 if sys.argv[1] == "missingdata":
