@@ -32,6 +32,23 @@ if sys.argv[1] == "aggtest":
     #items = hour.GetChildren()
 
 if sys.argv[1] == "reagg":
+    values = { 
+        'device_id': arn
+    }
+    now = datetime.utcnow().replace(tzinfo=timezone.utc)
+    mb = aggregate.MinuteBucket(firstTime, values)
+    hb = aggregate.HourBucket(firstTime, mb, values)
+    while hb.EventTime < now:
+        print("Processing " + hb.BucketID())
+        hb.ProcessEvent()
+        nextHour = hb.NextBucketStart()
+
+        mb = aggregate.MinuteBucket(nextHour, values)
+        hb = aggregate.HourBucket(nextHour, mb, values)
+
+
+
+if sys.argv[1] == "migrateminutes":
     dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
     table = dynamodb.Table('EnergyMonitor.Minute')
 
