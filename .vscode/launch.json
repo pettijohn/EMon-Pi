@@ -22,12 +22,12 @@
             ]
         },
         {
-            "name": "Python: AggTest",
+            "name": "Python: MigrateMinutes",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}\\ops.py",
             "args": [
-                "aggtest"
+                "migrateminutes"
             ]
         },
         {

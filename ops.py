@@ -53,16 +53,21 @@ if sys.argv[1] == "migrateminutes":
     dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
     table = dynamodb.Table('EnergyMonitor.Minute')
 
+    lastEvaluted = None
     while True:
-        response = table.scan(
-            FilterExpression=Attr("bucket_id").contains("Z"),
-            ProjectionExpression="bucket_id",
-            ConsistentRead=True 
+        if lastEvaluted is None:
+            response = table.scan(
+                FilterExpression=Attr("bucket_id").contains("Z"),
+                ProjectionExpression="bucket_id"
+            )
+        else:
+            response = table.scan(
+                FilterExpression=Attr("bucket_id").contains("Z"),
+                ProjectionExpression="bucket_id",
+                ExclusiveStartKey=lastEvaluted
             )
 
         items = response['Items']
-        if len(items) < 1:
-            quit()
 
         for item in items:
             bucketToReAgg = item['bucket_id']
@@ -77,6 +82,12 @@ if sys.argv[1] == "migrateminutes":
             aggd = minute.ProcessEvent(False, False)
             time.sleep(0.1)
         print(".")
+        if "LastEvaluatedKey" in response:
+            # Paginate dynamo's results
+            # https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html
+            lastEvaluted = response["LastEvaluatedKey"]
+        else:
+            quit()
 
 if sys.argv[1] == "reaggiot":
     print("Connecting IoT client")
