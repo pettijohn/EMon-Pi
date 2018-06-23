@@ -35,8 +35,9 @@ if sys.argv[1] == "reagg":
     values = { 
         'device_id': arn
     }
-    startTime =  datetime(2018,5,18,7,0,0, tzinfo=timezone.utc)
-    now = datetime.utcnow().replace(tzinfo=timezone.utc)
+    startTime =  datetime(2018,6,22,6,0,0, tzinfo=timezone.utc)
+    now =        datetime(2018,6,23,8,0,0, tzinfo=timezone.utc)
+    #now = datetime.utcnow().replace(tzinfo=timezone.utc)
     mb = aggregate.MinuteBucket(startTime, values)
     hb = aggregate.HourBucket(startTime, mb, values)
     while hb.EventTime < now:
