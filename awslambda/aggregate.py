@@ -161,13 +161,15 @@ class BucketRule:
             return None
 
 class EndViaFormatBucket():
-    def BucketEndTime(self) -> datetime:
+    def BucketEndTime(self, bucketStartTime=None) -> datetime:
         """ For subclasses that can compute the last bucket with format (i.e. everything but Month) """
+        if bucketStartTime is None:
+            bucketStartTime = self.EventTime
         # EventTime is UTC, so LocalTimeFormat parses with +0000
-        return datetime.strptime(self.EventTime.strftime(self.BucketEndFormat), self.TimeFormat).replace(tzinfo=pytz.utc)
+        return datetime.strptime(bucketStartTime.strftime(self.BucketEndFormat), self.TimeFormat)#.replace(tzinfo=pytz.utc)
         
 class EndViaDuration():
-    def BucketEndTime(self) -> datetime:
+    def BucketEndTime(self, bucketStartTime=None) -> datetime:
         return super().BucketStartTime() + self.BucketDuration() - self.AggedFrom.BucketDuration()
 
 class MinuteBucket(EndViaFormatBucket, BucketRule):
@@ -260,8 +262,10 @@ class LocalBucketRule():
         # time for user comprehension. 
         
         # Find the local start & stop times. BucketID includes offset. 
-        localStart = datetime.strptime(self.BucketID(), self.BucketFormat)        
-        baseEnd = super().BucketEndTime().replace(tzinfo=None)
+        localStart = datetime.strptime(self.BucketID(), self.BucketFormat) 
+              
+        baseEnd = super().BucketEndTime(localStart).replace(tzinfo=None)
+        # Fixup the time zone
         localEnd = self.DeviceTimeZone().localize(baseEnd)
         
         # Convert to UTC

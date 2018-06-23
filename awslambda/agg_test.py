@@ -104,6 +104,49 @@ assert hb.BucketID() == "2018-06-16T00:00+0000" # UTC
 
 db = DayBucket(localYesterday, hb, {})
 assert db.BucketID() == "2018-06-15T00:00-0700" # Local
+assert db.BucketStartTime() == datetime(2018,6,15,7,0,0, tzinfo=pytz.utc)
+assert db.BucketEndTime() == datetime(2018,6,16,6,0,0, tzinfo=pytz.utc)
+
+localLastMonth = datetime(2018,3,1,0,0,0, tzinfo=pytz.utc)
+
+mb = MinuteBucket(localLastMonth, {})
+assert mb.BucketID() == "2018-03-01T00:00+0000" # UTC
+
+hb = HourBucket(localLastMonth, mb, {})
+assert hb.BucketID() == "2018-03-01T00:00+0000" # UTC
+
+db = DayBucket(localLastMonth, hb, {})
+assert db.BucketID() == "2018-02-28T00:00-0800" # Local
+assert db.BucketStartTime() == datetime(2018,2,28,8,0,0, tzinfo=pytz.utc)
+assert db.BucketEndTime() == datetime(2018,3,1,7,0,0, tzinfo=pytz.utc)
+
+mt = MonthBucket(localLastMonth, db, {})
+assert mt.BucketID() == "2018-02-01T00:00-0800" # Local
+assert mt.BucketStartTime() == datetime(2018,2,1,8,0,0, tzinfo=pytz.utc)
+assert mt.BucketEndTime() == datetime(2018,2,28,8,0,0, tzinfo=pytz.utc)
+
+localLastYear = datetime(2018,1,1,1,1,1, tzinfo=pytz.utc)#1:01:01am new year's day UTC, 5pm PDT NYE
+
+mb = MinuteBucket(localLastYear, {})
+assert mb.BucketID() == "2018-01-01T01:01+0000" # UTC
+
+hb = HourBucket(localLastYear, mb, {})
+assert hb.BucketID() == "2018-01-01T01:00+0000" # UTC
+
+db = DayBucket(localLastYear, hb, {})
+assert db.BucketID() == "2017-12-31T00:00-0800" # Local
+assert db.BucketStartTime() == datetime(2017,12,31,8,0,0, tzinfo=pytz.utc)
+assert db.BucketEndTime()   == datetime(2018, 1, 1,7,0,0, tzinfo=pytz.utc)
+
+mt = MonthBucket(localLastYear, db, {})
+assert mt.BucketID() == "2017-12-01T00:00-0800" # Local
+assert mt.BucketStartTime() == datetime(2017,12, 1,8,0,0, tzinfo=pytz.utc)
+assert mt.BucketEndTime()   == datetime(2017,12,31,8,0,0, tzinfo=pytz.utc)
+
+yb = YearBucket(localLastYear, mt, {})
+assert yb.BucketID() == "2017-01-01T00:00-0800" # Local
+assert yb.BucketStartTime() == datetime(2017, 1, 1,8,0,0, tzinfo=pytz.utc)
+assert yb.BucketEndTime()   == datetime(2017,12, 1,8,0,0, tzinfo=pytz.utc)
 
 
 # TODO - add fall back case 
