@@ -22,14 +22,11 @@ Contains code to create DynamoDB tables, configure IoT, and upload Lambda functi
 Run `aws configure` and enter the access key for an IAM user with the necessary permissions. 
 
 # TODO
-* Reagged through Day 2018-05-27 (partial)
-* Update Day to be timezone aware
 * Missing Data
- * 2018-05-28T03
- * 2018-06-02T07
- * For every hour, identify <60 minutes, interpolate and insert.
+ * For every hour, identify <60 minute entries, interpolate and insert.
+ * Run every 24 hours for prior 36 hours
 * Update Lambda function to aggregate on write
 * Build Fetch API that is timezone aware
 * Make app boot on Pi
-* Run reagg in an EC2 host
+* Run web server on Pi or Lambda and spit out simple HTML report/dashboard
 * Hardware client - batch into 5min uploads. Flush on keyboardInterrupt. 

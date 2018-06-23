@@ -73,7 +73,8 @@ class BucketRule:
         # The child bucket
         childTable = self.GetTable(self.AggedFrom.TableSuffix)
         children = childTable.query(
-            KeyConditionExpression=Key('device_id').eq(self.Values['device_id']) & Key('bucket_id').between(childStartBucket, childEndBucket)
+            KeyConditionExpression=Key('device_id').eq(self.Values['device_id']) & Key('bucket_id').between(childStartBucket, childEndBucket),
+            ConsistentRead=True
         )
         return children['Items']
         #return children
