@@ -35,18 +35,20 @@ if sys.argv[1] == "reagg":
     values = { 
         'device_id': arn
     }
-    startTime =  datetime(2018,6,22,6,0,0, tzinfo=timezone.utc)
-    now =        datetime(2018,6,23,8,0,0, tzinfo=timezone.utc)
-    #now = datetime.utcnow().replace(tzinfo=timezone.utc)
+    startTime =  firstTime # datetime(2018,6,22,6,0,0, tzinfo=timezone.utc)
+    #now =        datetime(2018,6,23,8,0,0, tzinfo=timezone.utc)
+    now = datetime.utcnow().replace(tzinfo=timezone.utc)
     mb = aggregate.MinuteBucket(startTime, values)
     hb = aggregate.HourBucket(startTime, mb, values)
-    while hb.EventTime < now:
-        print("Processing " + hb.BucketID())
-        hb.ProcessEvent()
-        nextHour = hb.NextBucketStart()
+    db = aggregate.DayBucket(startTime, hb, values)
+    while db.EventTime < now:
+        print("Processing " + db.BucketID())
+        db.ProcessEvent()
+        nextEvent = db.NextBucketStart()
 
-        mb = aggregate.MinuteBucket(nextHour, values)
-        hb = aggregate.HourBucket(nextHour, mb, values)
+        mb = aggregate.MinuteBucket(nextEvent, values)
+        hb = aggregate.HourBucket(nextEvent, mb, values)
+        db = aggregate.DayBucket(nextEvent, hb, values)
 
 
 
