@@ -193,41 +193,19 @@ class MinuteBucket(EndViaFormatBucket, BucketRule):
         # See if there is an existing item 
         item = self.GetItem()
         table = self.GetTable(self.TableSuffix)
-        # FIXME - get rid of legacy bucket ID check & migration
-        if item is None:
-            # Check for legacy bucket ID
-            legacyID = self.EventTime.strftime(self.LegacyBucketFormat)
-            item = self.GetItem(legacyID)
-            if item is not None:
-                # Found legacy - migrate it
-                # We use a new bucket ID format and use 'amps' instead of 
-                # 'current' because the latter is a reserved word in dynamodb
-                item['bucket_id'] = self.BucketID()
-                item['amps'] = item.pop('current')
-                table.put_item(Item=item)
-                table.delete_item(Key={
-                        'device_id': item['device_id'],
-                        'bucket_id': legacyID
-                    })
-        else:
-            # If we find the new row, check also for the legacy row and delete it
-            legacyID = self.EventTime.strftime(self.LegacyBucketFormat)
-            item = self.GetItem(legacyID)
-            if item is not None:
-                table.delete_item(Key={
-                        'device_id': item['device_id'],
-                        'bucket_id': legacyID
-                    })
-
-
+        if item is not None:
+            # should not exist, but noop
+            print("Warning: Found entry for minute {0} / {1}".format(values['device_id'], self.BucketID()))
+            # For consistency, set Values to the retrieved item
+            self.Values = item
         results = None
         if item is None and doInsert:
-            # If still none, insert. Wo don't insert when re-aggregating. 
+            # Insert. Wo don't insert when re-aggregating. 
             results = table.put_item(Item=self.Values)
             
         if chain and self.AggTo is not None and type(self.AggTo) != BucketRule:
             # Aggregate to the next level
-            nextLevel = self.AggTo(self.EventTime, self, item)
+            nextLevel = self.AggTo(self.EventTime, self, self.Values)
             return nextLevel.ProcessEvent(chain)
         else:
             return results

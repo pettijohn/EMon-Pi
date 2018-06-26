@@ -26,7 +26,7 @@ Run `aws configure` and enter the access key for an IAM user with the necessary 
  * For every hour, identify <60 minute entries, interpolate and insert.
  * Run every 24 hours for prior 36 hours
 * Update Lambda function to aggregate on write
-* Build Fetch API that is timezone aware
+* Build Query/Fetch API that is timezone aware
 * Make app boot on Pi
 * Run web server on Pi or Lambda and spit out simple HTML report/dashboard
 * Hardware client - batch into 5min uploads. Flush on keyboardInterrupt. 

@@ -18,7 +18,8 @@
             "request": "launch",
             "program": "${workspaceFolder}\\ops.py",
             "args": [
-                "reagg"
+                "reagg",
+                "hour"
             ]
         },
         {
