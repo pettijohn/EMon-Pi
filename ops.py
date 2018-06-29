@@ -195,4 +195,18 @@ if sys.argv[1] == "fix":
             ReturnValues="UPDATED_NEW"
         )
         print(i)
-    
+
+def tryParse(date_string: str):
+    for format in ["%Y-%m-%dT%H:%M%z", "%Y-%m-%dT%H:%MZ", "%Y-%m-%dT%H:%M", "%Y-%m-%d"]:
+        try:
+            return datetime.strptime(date_string, format).replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+
+if sys.argv[1] == "query":
+    start = tryParse(sys.argv[2])
+    end   = tryParse(sys.argv[3])
+
+    results = aggregate.Query(start, end, {"device_id": arn})
+    for r in results:
+        print ("{0} : ${1:,.6f}".format(r['bucket_id'], r['cost_usd']))

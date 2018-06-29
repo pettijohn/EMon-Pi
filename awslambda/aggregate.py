@@ -321,3 +321,43 @@ class YearBucket(LocalBucketRule, EndViaFormatBucket, BucketRule):
 
     def BucketDuration(self) -> timedelta:
         return monthdelta(12)
+
+def __constructHierarchy(eventTime: datetime, values: dict):
+    minute = MinuteBucket(eventTime, values)
+    hour = HourBucket(eventTime, minute, values)
+    day = DayBucket(eventTime, hour, values)
+    month = MonthBucket(eventTime, day, values)
+    year = YearBucket(eventTime, month, values)
+    return [minute, hour, day, month, year]
+    
+def Query(startTime: datetime, endTime: datetime, values: dict):
+    """ Return up to 60 rows of data depending on start & end time. 
+    Returns appropriate granularity (minute, hour, day, month, year) 
+    to achieve that aim."""
+    # Determine granularity
+    duration = endTime - startTime
+    if duration >= timedelta(days=365*5):
+        grain = 4 # YearBucket
+    elif duration >= timedelta(days=60):
+        grain = 3 # MonthBucket
+    elif duration >= timedelta(days=4):
+        grain = 2 # DayBucket
+    elif duration > timedelta(seconds=60*61):
+        grain = 1 # HourBucket
+    else:
+        grain = 0 # MinuteBucket
+
+    # Construct the aggreation hierarchy
+    starts = __constructHierarchy(startTime, values)
+    ends = __constructHierarchy(endTime, values)
+
+    # Then use the grain to construct start & end buckets for query
+    queryStart, queryEnd = starts[grain], ends[grain]
+
+    query = queryStart
+    items = []
+    while query.BucketStartTime() <= queryEnd.BucketStartTime():
+        items.append(query.GetItem())
+        queryNext = __constructHierarchy(query.NextBucketStart(), values)
+        query = queryNext[grain]
+    return items
