@@ -24,9 +24,8 @@ Run `aws configure` and enter the access key for an IAM user with the necessary 
 # TODO
 * Missing Data
  * For every hour, identify <60 minute entries, interpolate and insert.
- * Run every 24 hours for prior 36 hours
-* Update Lambda function to aggregate on write
-* Build Query/Fetch API that is timezone aware
-* Make app boot on Pi
-* Run web server on Pi or Lambda and spit out simple HTML report/dashboard
+ * Run every hour for prior two hours
+ * Alarm if >6(?) missing
+* Make app boot on Pi.
+* Have API Gateway spit out static HTML/JS from S3 and AJAX response from Lambda to render dashboard.
 * Hardware client - batch into 5min uploads. Flush on keyboardInterrupt. 

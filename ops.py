@@ -196,16 +196,19 @@ if sys.argv[1] == "fix":
         )
         print(i)
 
-def tryParse(date_string: str):
+def tryParseDatetime(date_string: str):
     for format in ["%Y-%m-%dT%H:%M%z", "%Y-%m-%dT%H:%MZ", "%Y-%m-%dT%H:%M", "%Y-%m-%d"]:
         try:
-            return datetime.strptime(date_string, format).replace(tzinfo=timezone.utc)
+            val = datetime.strptime(date_string, format)
+            if val.tzinfo == None:
+                val = val.replace(tzinfo=timezone.utc)
+            return val
         except ValueError:
             pass
 
 if sys.argv[1] == "query":
-    start = tryParse(sys.argv[2])
-    end   = tryParse(sys.argv[3])
+    start = tryParseDatetime(sys.argv[2])
+    end   = tryParseDatetime(sys.argv[3])
 
     results = aggregate.Query(start, end, {"device_id": arn})
     for r in results:

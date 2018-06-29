@@ -19,7 +19,18 @@
             "program": "${workspaceFolder}\\ops.py",
             "args": [
                 "reagg",
-                "hour"
+                "day"
+            ]
+        },
+        {
+            "name": "Python: Query",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\ops.py",
+            "args": [
+                "query",
+                "2018-06-06",
+                "2018-06-26"
             ]
         },
         {

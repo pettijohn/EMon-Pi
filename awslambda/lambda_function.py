@@ -18,6 +18,16 @@ class DecimalEncoder(json.JSONEncoder):
 
 bucketFormat = "%Y-%m-%dT%H:%M%z"
 
+def tryParseDatetime(date_string: str):
+    for format in ["%Y-%m-%dT%H:%M%z", "%Y-%m-%dT%H:%MZ", "%Y-%m-%dT%H:%M", "%Y-%m-%d"]:
+        try:
+            val = datetime.strptime(date_string, format)
+            if val.tzinfo == None:
+                val = val.replace(tzinfo=timezone.utc)
+            return val
+        except ValueError:
+            pass
+
 def lambda_handler(event, context):
     event = json.loads(json.dumps(event, cls=DecimalEncoder), parse_float=Decimal)
 
@@ -26,6 +36,14 @@ def lambda_handler(event, context):
     minute = aggregate.MinuteBucket(time, event)
     if 'action' in event and event['action'] == "reagg":
         minute.ProcessEvent(doInsert=False)
+    elif 'action' in event and event['action'] == "query":
+        start = tryParseDatetime(event['start'])
+        end   = tryParseDatetime(event['end'])
+        device_id = event['device_id']
+        if start == None or end == None or device_id == None:
+            return "ERROR - 'start', 'end', and 'device_id' are required"
+
+        return aggregate.Query(start, end, {"device_id": device_id})
     else:
         # regular insert event
         minute.ProcessEvent()
