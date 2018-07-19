@@ -30,16 +30,28 @@ var WildRydes = window.WildRydes || {};
             contentType: 'application/json',
             success: completeRequest,
             error: function ajaxError(jqXHR, textStatus, errorThrown) {
-                console.error('Error requesting ride: ', textStatus, ', Details: ', errorThrown);
+                console.error('Error loading data: ', textStatus, ', Details: ', errorThrown);
                 console.error('Response: ', jqXHR.responseText);
-                alert('An error occured when requesting your unicorn:\n' + jqXHR.responseText);
+                alert('An error occured while loading the page:\n' + jqXHR.responseText);
             }
         });
     }
 
     function completeRequest(result) {
-        console.log('Response received from API: ', result);
-        $("#main").html(JSON.stringify(result))
+        //console.log('Response received from API: ', result);
+        $("#t7d").DataTable( {
+            data: result,
+            columns: [
+                {"data": "bucket_id", "title": "Date"},
+                {"data": "cost_usd", "title": "Cost (USD)"}
+            ]
+        });
+
+        // result.forEach(row => {
+        //     $('#t7d tbody tr:last').after('<tr><td>' + row["bucket_id"] + '</td><td>' + row["cost_usd"] + '</td></tr>');
+        // });
+        // $('#t7d').DataTable();
+        //$("#main").html(JSON.stringify(result))
     }
 
     // Register click handler for #request button
@@ -63,7 +75,7 @@ var WildRydes = window.WildRydes || {};
             $('#noApiMessage').show();
         }
 
-        fetchData("2018-07-01", "2018-07-19")
+        fetchData("2018-07-13", "2018-07-19")
     });
 
     function handlePickupChanged() {

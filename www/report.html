@@ -4,17 +4,15 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
-    <title>Wild Rydes</title>
+    <title>Energy Monitor</title>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Serverless web application example">
     <meta name="author" content="">
 
-
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
-    <link rel="stylesheet" href="css/index.css">
-    <link rel="stylesheet" href="css/message.css">
+    <link rel="stylesheet" href="css/site.css"/>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.19/css/jquery.dataTables.min.css"/>
 </head>
 
 <body>
@@ -44,10 +42,14 @@
         </div>
     </div>
 
+    <h1>Energy Monitor</h1>
     <div id="main">
+        <h2>Last 7 Days</h2>
+        <table id="t7d">
+        </table>
     </div>
 
-    <div id="authTokenModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="authToken">
+    <div id="authTokenModal" style="display: none" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="authToken">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
                 <div class="modal-header">
@@ -66,7 +68,7 @@
 
 
     <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
-    <script src="js/vendor/bootstrap.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js"></script>
     <script src="js/vendor/aws-cognito-sdk.min.js"></script>
     <script src="js/vendor/amazon-cognito-identity.min.js"></script>
     <script src="js/config.js"></script>
