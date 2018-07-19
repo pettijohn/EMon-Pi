@@ -4,6 +4,7 @@ import json
 import aggregate
 from datetime import datetime, timezone, timedelta
 import pytz
+import sys
 
 # Helper class to convert a DynamoDB item to JSON.
 class DecimalEncoder(json.JSONEncoder):
@@ -15,7 +16,7 @@ class DecimalEncoder(json.JSONEncoder):
                 return int(o)
         return super(DecimalEncoder, self).default(o)
         
-
+arn = "arn:aws:iot:us-east-1:422446087002:thing/EMonPi"
 bucketFormat = "%Y-%m-%dT%H:%M%z"
 
 def tryParseDatetime(date_string: str):
@@ -31,30 +32,63 @@ def tryParseDatetime(date_string: str):
 def lambda_handler(event, context):
     event = json.loads(json.dumps(event, cls=DecimalEncoder), parse_float=Decimal)
 
-    # Parse important fields and create bucket
-    time = datetime.strptime(event['bucket_id'], bucketFormat).replace(tzinfo=timezone.utc)
-    minute = aggregate.MinuteBucket(time, event)
-    if 'action' in event and event['action'] == "reagg":
-        minute.ProcessEvent(doInsert=False)
-    elif 'action' in event and event['action'] == "query":
-        start = tryParseDatetime(event['start'])
-        end   = tryParseDatetime(event['end'])
-        device_id = event['device_id']
-        if start == None or end == None or device_id == None:
-            return "ERROR - 'start', 'end', and 'device_id' are required"
+    # Check if this is an API Gateway request
+    if 'path' in event and 'httpMethod' in event:
+        if event['path'] != "/query":
+            raise Exception("Unknown command")
 
-        return aggregate.Query(start, end, {"device_id": device_id})
+        query = json.loads(event['body'], parse_float=Decimal)
+        assert 'start' in query, "Parameter 'start' required"
+        assert 'end' in query, "Parameter 'end' required"
+        #assert 'format' in query, "Parameter 'format' required"
+        #assert query['format'] in ['total', 'detail']
+        start = tryParseDatetime(query['start'])
+        end   = tryParseDatetime(query['end'])
+        result = aggregate.Query(start, end, {"device_id": arn} )
+
+        return {
+            "isBase64Encoded": False,
+            "statusCode": 200,
+            "headers": {"Access-Control-Allow-Origin": "*"},
+            "body": json.dumps(result, cls=DecimalEncoder)
+        }
+    
     else:
-        # regular insert event
+        # AWS IoT event
+        # Parse important fields and create bucket
+        time = datetime.strptime(event['bucket_id'], bucketFormat).replace(tzinfo=timezone.utc)
+        minute = aggregate.MinuteBucket(time, event)
         minute.ProcessEvent()
 
 if __name__ == "__main__":
-    time = datetime.utcnow().replace(tzinfo=timezone.utc) + timedelta(5) # work in the future 
-    payload = { "device_id": "arn:aws:iot:us-east-1:422446087002:thing/EMonPi",
-        "bucket_id": time.strftime("%Y-%m-%dT%H:%M%z"),
-        "amps": Decimal('0'),
-        "volts": Decimal('242.0'),
-        "watt_hours": Decimal('60'),
-        "cost_usd": Decimal('60')
-    }
-    lambda_handler(payload, None)
+    if len(sys.argv) > 1:
+        time = datetime.utcnow().replace(tzinfo=timezone.utc) + timedelta(5) # work in the future 
+        payload = { "device_id": arn,
+            "bucket_id": time.strftime("%Y-%m-%dT%H:%M%z"),
+            "amps": Decimal('0'),
+            "volts": Decimal('242.0'),
+            "watt_hours": Decimal('60'),
+            "cost_usd": Decimal('60')
+        }
+        lambda_handler(payload, None)
+    else:
+        jstr = """{
+    "path": "/query",
+    "httpMethod": "POST",
+    "headers": {
+        "Accept": "*/*",
+        "Authorization": "eyJraWQiOiJLTzRVMWZs",
+        "content-type": "application/json; charset=UTF-8"
+    },
+    "queryStringParameters": null,
+    "pathParameters": null,
+    "requestContext": {
+        "authorizer": {
+            "claims": {
+                "cognito:username": "the_username"
+            }
+        }
+    },
+    "body": "{\\"start\\": \\"2018-07-18\\", \\"end\\": \\"2018-07-18\\"}"
+}"""
+        lambda_handler(json.loads(jstr), None)

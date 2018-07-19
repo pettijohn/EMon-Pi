@@ -336,25 +336,26 @@ def ConstructHierarchy(eventTime: datetime, values: dict):
     year = YearBucket(eventTime, month, values)
     return [minute, hour, day, month, year]
     
-def Query(startTime: datetime, endTime: datetime, values: dict):
+def Query(startTime: datetime, endTime: datetime, values: dict, grain=-1):
     """ Return up to about 60 rows of data depending on start & end time. 
     Returns appropriate granularity (minute, hour, day, month, year) 
     to achieve that aim."""
     # Determine granularity
     duration = endTime - startTime
-    if duration >= timedelta(days=365*5):
-        grain = 4 # YearBucket
-    elif duration >= timedelta(days=60):
-        # 60 days through 60 months - return months
-        grain = 3 # MonthBucket
-    elif duration >= timedelta(days=3):
-        # 3 to 60 days  - return days
-        grain = 2 # DayBucket
-    elif duration > timedelta(seconds=60*61):
-        # 61 minutes to 72 hours return hours
-        grain = 1 # HourBucket
-    else:
-        grain = 0 # MinuteBucket
+    if grain == -1:
+        if duration >= timedelta(days=365*5):
+            grain = 4 # YearBucket
+        elif duration >= timedelta(days=60):
+            # 60 days through 60 months - return months
+            grain = 3 # MonthBucket
+        elif duration >= timedelta(days=3):
+            # 3 to 60 days  - return days
+            grain = 2 # DayBucket
+        elif duration > timedelta(seconds=60*61):
+            # 61 minutes to 72 hours return hours
+            grain = 1 # HourBucket
+        else:
+            grain = 0 # MinuteBucket
 
     # Construct the aggreation hierarchy
     starts = ConstructHierarchy(startTime, values)
@@ -363,12 +364,3 @@ def Query(startTime: datetime, endTime: datetime, values: dict):
     # Then use the grain to construct start & end buckets for query
     queryStart, queryEnd = starts[grain], ends[grain]
     return queryStart.GetRange(queryStart.BucketID(), queryEnd.BucketID())
-
-    # query = queryStart
-    # items = []
-    # # Fetch one by one to build the result set. 
-    # while query.BucketStartTime() <= queryEnd.BucketStartTime():
-    #     items.append(query.GetItem())
-    #     queryNext = ConstructHierarchy(query.NextBucketStart(), values)
-    #     query = queryNext[grain]
-    # return items
