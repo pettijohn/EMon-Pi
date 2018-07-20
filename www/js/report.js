@@ -32,6 +32,7 @@ var WildRydes = window.WildRydes || {};
             error: function ajaxError(jqXHR, textStatus, errorThrown) {
                 console.error('Error loading data: ', textStatus, ', Details: ', errorThrown);
                 console.error('Response: ', jqXHR.responseText);
+                console.error('Status: ', jqXHR.status)
                 alert('An error occured while loading the page:\n' + jqXHR.responseText);
             }
         });
@@ -63,7 +64,6 @@ var WildRydes = window.WildRydes || {};
             alert("You have been signed out.");
             window.location = "index.html";
         });
-        $(WildRydes.map).on('pickupChange', handlePickupChanged);
 
         WildRydes.authToken.then(function updateAuthMessage(token) {
             if (token) {
@@ -76,10 +76,10 @@ var WildRydes = window.WildRydes || {};
             $('#noApiMessage').show();
         }
 
-        now = new Date()
-        prev = new Date(now.getTime() - 1000*60*60*24*59) //59 days earlier
+        now = new Date();
+        prev = new Date(now.getTime() - 1000*60*60*24*59); //59 days earlier
 
-        fetchData(formatDate(prev), formatDate(now))
+        fetchData(formatDate(prev), formatDate(now));
     });
 
     function formatDate(d) {

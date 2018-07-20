@@ -24,10 +24,12 @@ def tryParseDatetime(date_string: str):
         try:
             val = datetime.strptime(date_string, format)
             if val.tzinfo == None:
-                val = val.replace(tzinfo=timezone.utc)
+                # If timezone not present, default to Device Time Zone #FIXME
+                val = pytz.timezone("America/Los_Angeles").localize(val)
             return val
         except ValueError:
             pass
+    raise ValueError("Unable to parse input date/time string")
 
 def lambda_handler(event, context):
     event = json.loads(json.dumps(event, cls=DecimalEncoder), parse_float=Decimal)
@@ -89,6 +91,6 @@ if __name__ == "__main__":
             }
         }
     },
-    "body": "{\\"start\\": \\"2018-07-18\\", \\"end\\": \\"2018-07-18\\"}"
+    "body": "{\\"start\\": \\"2018-5-22\\", \\"end\\": \\"2018-7-20\\"}"
 }"""
         lambda_handler(json.loads(jstr), None)

@@ -336,13 +336,20 @@ def ConstructHierarchy(eventTime: datetime, values: dict):
     year = YearBucket(eventTime, month, values)
     return [minute, hour, day, month, year]
     
-def Query(startTime: datetime, endTime: datetime, values: dict, grain=-1):
+def Query(startTime: datetime, endTime: datetime, values: dict, grain="auto"):
     """ Return up to about 60 rows of data depending on start & end time. 
     Returns appropriate granularity (minute, hour, day, month, year) 
     to achieve that aim."""
     # Determine granularity
+    grainMap = {"year": 4,
+        "month": 3,
+        "day": 2,
+        "hour": 1,
+        "minute": 0,
+        "auto": -1
+    }
     duration = endTime - startTime
-    if grain == -1:
+    if grain == "auto":
         if duration >= timedelta(days=365*5):
             grain = 4 # YearBucket
         elif duration >= timedelta(days=60):
@@ -356,6 +363,8 @@ def Query(startTime: datetime, endTime: datetime, values: dict, grain=-1):
             grain = 1 # HourBucket
         else:
             grain = 0 # MinuteBucket
+    else:
+        grain = grainMap[grain]
 
     # Construct the aggreation hierarchy
     starts = ConstructHierarchy(startTime, values)
