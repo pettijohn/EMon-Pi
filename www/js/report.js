@@ -39,19 +39,20 @@ var WildRydes = window.WildRydes || {};
 
     function completeRequest(result) {
         //console.log('Response received from API: ', result);
-        $("#t7d").DataTable( {
+        dt = $("#recentDays").DataTable( {
             data: result,
             columns: [
-                {"data": "bucket_id", "title": "Date"},
-                {"data": "cost_usd", "title": "Cost (USD)"}
+                {"data": "bucket_id", "title": "Date", "render": function ( data, type, row, meta ) {
+                    return data.substr( 0, 10 )
+                    }
+                },
+                {"data": "cost_usd", "title": "Cost (USD)", "render": $.fn.dataTable.render.number(',', '.', 2, '$')
+                    //function ( data, type, row, meta ) { return "$" + Math.round(data*100)/100 }
+                }
             ]
         });
-
-        // result.forEach(row => {
-        //     $('#t7d tbody tr:last').after('<tr><td>' + row["bucket_id"] + '</td><td>' + row["cost_usd"] + '</td></tr>');
-        // });
-        // $('#t7d').DataTable();
-        //$("#main").html(JSON.stringify(result))
+        //Sort table by recent days
+        dt.order([ 0, 'desc' ]).draw();
     }
 
     // Register click handler for #request button
@@ -75,8 +76,15 @@ var WildRydes = window.WildRydes || {};
             $('#noApiMessage').show();
         }
 
-        fetchData("2018-07-13", "2018-07-19")
+        now = new Date()
+        prev = new Date(now.getTime() - 1000*60*60*24*59) //59 days earlier
+
+        fetchData(formatDate(prev), formatDate(now))
     });
+
+    function formatDate(d) {
+        return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+    }
 
     function handlePickupChanged() {
         var requestButton = $('#request');
