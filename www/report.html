@@ -44,9 +44,10 @@
 
     <h1>Energy Monitor</h1>
     <div id="main">
-        <h2>Last 60 Days</h2>
+        <div id="chart"></div>
+        <!-- <h2>Last 60 Days</h2>
         <table id="recentDays" class="display">
-        </table>
+        </table> -->
     </div>
 
     <div id="authTokenModal" style="display: none" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="authToken">
@@ -71,6 +72,7 @@
     <script src="https://cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js"></script>
     <script src="js/vendor/aws-cognito-sdk.min.js"></script>
     <script src="js/vendor/amazon-cognito-identity.min.js"></script>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <script src="js/config.js"></script>
     <script src="js/cognito-auth.js"></script>
     <script src="js/report.js"></script>
