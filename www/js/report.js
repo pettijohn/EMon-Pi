@@ -57,33 +57,32 @@ var WildRydes = window.WildRydes || {};
     }
 
     function completeRequest(result) {
-        //console.log('Response received from API: ', result);
-        // dt = $("#recentDays").DataTable( {
-        //     data: result,
-        //     columns: [
-        //         {"data": "bucket_id", "title": "Date", "render": function ( data, type, row, meta ) {
-        //             return data.substr( 0, 10 )
-        //             }
-        //         },
-        //         {"data": "cost_usd", "title": "Cost (USD)", "render": $.fn.dataTable.render.number(',', '.', 2, '$')
-        //             //function ( data, type, row, meta ) { return "$" + Math.round(data*100)/100 }
-        //         }
-        //     ]
-        // });
-        // //Sort table by recent days
-        // dt.order([ 0, 'desc' ]).draw();
+        
 
         var data = new google.visualization.DataTable();
         data.addColumn('string', 'Date');
         data.addColumn('number', 'Cost (USD)');
+        var totalUSD = 0.0;
+        var totalWH = 0.0
         result.forEach(row => {
             data.addRow([row['bucket_id'], Math.round(row['cost_usd']*100)/100])
+            totalUSD += row['cost_usd'];
+            totalWH += row['watt_hours'];
+        });
+
+        //Render total data table
+        dt = $("#totals").DataTable( {
+            data: [
+                ["Cost (USD)", Math.round(totalUSD*100)/100],
+                ["Power (kWh)", Math.round(totalWH/1000*100)/100]
+            ]
         });
 
         // Set chart options
         // https://developers.google.com/chart/interactive/docs/gallery/barchart#Configuration_Options
         var options = {'title':'Cost Explorer',
-            'legend': {'position': 'none'}
+            'legend': {'position': 'none'},
+            'chartArea': {'width': '70%', 'height': '90%'}
         };
 
         function selectHandler() {
