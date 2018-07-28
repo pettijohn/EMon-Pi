@@ -36,17 +36,20 @@ def lambda_handler(event, context):
 
     # Check if this is an API Gateway request
     if 'path' in event and 'httpMethod' in event:
-        if event['path'] != "/query":
+        if event['path'] not in ["/query", "/range"]:
             raise Exception("Unknown command")
 
-        query = json.loads(event['body'], parse_float=Decimal)
+        if "queryStringParameters" in event and event['queryStringParameters'] != None:
+            query = event['queryStringParameters']
+        else:
+            query = json.loads(event['body'], parse_float=Decimal)
         assert 'start' in query, "Parameter 'start' required"
         assert 'end' in query, "Parameter 'end' required"
-        #assert 'format' in query, "Parameter 'format' required"
-        #assert query['format'] in ['total', 'detail']
+        assert 'grain' in query, "Parameter 'grain' required"
+        
         start = tryParseDatetime(query['start'])
         end   = tryParseDatetime(query['end'])
-        result = aggregate.Query(start, end, {"device_id": arn} )
+        result = aggregate.Query(start, end, {"device_id": arn}, query['grain'])
 
         return {
             "isBase64Encoded": False,
@@ -63,7 +66,7 @@ def lambda_handler(event, context):
         minute.ProcessEvent()
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
+    if False:
         time = datetime.utcnow().replace(tzinfo=timezone.utc) + timedelta(5) # work in the future 
         payload = { "device_id": arn,
             "bucket_id": time.strftime("%Y-%m-%dT%H:%M%z"),
@@ -75,14 +78,18 @@ if __name__ == "__main__":
         lambda_handler(payload, None)
     else:
         jstr = """{
-    "path": "/query",
-    "httpMethod": "POST",
+    "path": "/range",
+    "httpMethod": "GET",
     "headers": {
         "Accept": "*/*",
         "Authorization": "eyJraWQiOiJLTzRVMWZs",
         "content-type": "application/json; charset=UTF-8"
     },
-    "queryStringParameters": null,
+    "queryStringParameters": {
+        "start": "2018-07-01",
+        "end": "2018-07-31",
+        "grain": "day"
+    },
     "pathParameters": null,
     "requestContext": {
         "authorizer": {

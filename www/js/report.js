@@ -9,26 +9,43 @@ var WildRydes = window.WildRydes || {};
         if (token) {
             authToken = token;
         } else {
-            window.location.href = '/index.html';
+            window.location.href = 'index.html';
         }
     }).catch(function handleTokenError(error) {
         alert(error);
-        window.location.href = '/index.html';
+        window.location.href = 'index.html';
     });
-    function fetchData(startDate, endDate) {
+
+    // Format a javascript date into a string that the backend can parse
+    function formatDate(d) {
+        return d.getFullYear() + '-' + ("00" + (d.getMonth() + 1)).slice(-2) + '-' + ("00" + d.getDate()).slice(-2);
+    }
+
+    // Fetch data between two dates
+    function fetchRange(startDate, endDate) {
+        var dataDict = {
+            start: formatDate(startDate),
+            end: formatDate(endDate),
+            grain: 'day'
+        };
+        queryCore(dataDict);
+    }
+
+    // Fetch child data
+    function fetchChildren(bucketID) {
+        // On click of a bar, get the children
+        
+    }
+
+    function queryCore(dataDict) {
         $.ajax({
-            method: 'POST',
-            url: _config.api.invokeUrl + '/query',
+            method: 'GET',
+            url: _config.api.invokeUrl + '/range',
             headers: {
                 Authorization: authToken
-                //, Origin: "http://energy.pettijohn.com"
             },
-            data: JSON.stringify({
-                start: startDate,
-                end: endDate,
-                format: 'total'
-            }),
-            contentType: 'application/json',
+            data: dataDict,
+            //contentType: 'application/json',
             success: completeRequest,
             error: function ajaxError(jqXHR, textStatus, errorThrown) {
                 console.error('Error loading data: ', textStatus, ', Details: ', errorThrown);
@@ -64,10 +81,23 @@ var WildRydes = window.WildRydes || {};
         });
 
         // Set chart options
-        var options = {'title':'Cost Explorer'};
+        // https://developers.google.com/chart/interactive/docs/gallery/barchart#Configuration_Options
+        var options = {'title':'Cost Explorer',
+            'legend': {'position': 'none'}
+        };
 
+        function selectHandler() {
+            var selectedItem = chart.getSelection()[0];
+            if (selectedItem) {
+              var item = data.getValue(selectedItem.row, 0);
+              console.log('The user selected ' + item);
+            }
+        }
+  
         // Instantiate and draw our chart, passing in some options.
         var chart = new google.visualization.BarChart($('#chart')[0]);
+        // Wire up select handler
+        google.visualization.events.addListener(chart, 'select', selectHandler);
         chart.draw(data, options);
     }
 
@@ -98,15 +128,11 @@ var WildRydes = window.WildRydes || {};
         google.charts.setOnLoadCallback(function() {
             // When the chart is ready to draw, fetch the data
             now = new Date();
-            prev = new Date(now.getTime() - 1000*60*60*24*59); //59 days earlier
+            prev = new Date(now.getTime() - 1000*60*60*24*30); //30 days earlier
 
-            fetchData(formatDate(prev), formatDate(now));
+            fetchRange(prev, now);
         });
         
     });
-
-    function formatDate(d) {
-        return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
-    }
 
 }(jQuery));
