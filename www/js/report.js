@@ -5,6 +5,23 @@ var WildRydes = window.WildRydes || {};
 // https://stackoverflow.com/questions/2937227/what-does-function-jquery-mean
 (function rideScopeWrapper($) {
     var authToken;
+
+    var renderRules = {
+        "minute": {
+            "seriesFormat": "hh:mm",
+            "timeZone": "utc"
+        },
+        "hour": {
+            "seriesFormat": "hh:mm",
+            "timeZone": "utc"
+        },
+        "day": {
+            "seriesFormat": "yyyy-MM-dd",
+            "timeZone": "local"
+        }
+        
+    }
+
     WildRydes.authToken.then(function setAuthToken(token) {
         if (token) {
             authToken = token;
@@ -82,7 +99,7 @@ var WildRydes = window.WildRydes || {};
         // https://developers.google.com/chart/interactive/docs/gallery/barchart#Configuration_Options
         var options = {'title':'Cost Explorer',
             'legend': {'position': 'none'},
-            'chartArea': {'width': '70%', 'height': '90%'}
+            'chartArea': {'left': '120', 'top': '50','width': '100%', 'height': '100%'}
         };
 
         function selectHandler() {
