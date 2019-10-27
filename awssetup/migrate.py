@@ -8,39 +8,33 @@ import time
 
 
 
-dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-tableFromGrain = "Month"
-tableFrom = dynamodb.Table('EnergyMonitor.' + tableFromGrain)
-tableTo   = dynamodb.Table('EnergyMonitor.PowerReadings')
+client = boto3.client('dynamodb', region_name='us-east-1')
+# tableFromGrain = ["Year", "Month", "Day", "Hour", "Minute"]
+tableFromGrain = ["Month"]
 
-lastEvaluted = None
-while True:
-    if lastEvaluted is None:
-        response = tableFrom.scan()
-    else:
-        response = tableFrom.scan(
-            ExclusiveStartKey=lastEvaluted
-        )
-
-    items = response['Items']
-
-    for item in items:
-        bucketToReAgg = item['bucket_id']
-        print(bucketToReAgg)
-        item['grain'] = tableFromGrain
-        item['device_grain'] = '{0}|{1}'.format(item['device_id'], tableFromGrain)
-        
-        tableTo.put_item(Item=item)
-        
-        time.sleep(0.1)
-    print(".")
-    if "LastEvaluatedKey" in response:
-        # Paginate dynamo's results
-        # https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html
-        lastEvaluted = response["LastEvaluatedKey"]
-    else:
-        quit()
-
-
+for grain in tableFromGrain:
+    paginator = client.get_paginator('scan')
+    for page in paginator.paginate(
+        TableName='EnergyMonitor.' + grain,
+        ConsistentRead=True
+        ):
 
     
+        items = page['Items']
+
+        for item in items:
+            print(item['bucket_id']['S'])
+            device_grain = '{0}|{1}'.format(item['device_id']['S'], grain)
+            item['grain'] = {'S': grain}
+            item['device_grain'] = {'S': device_grain}
+            
+            client.put_item(
+                TableName="EnergyMonitor.PowerReadings",
+                Item=item)
+            
+            time.sleep(0.1)
+        print(".")
+
+
+
+        

@@ -1,16 +1,35 @@
 from aggregate import *
 from datetime import datetime
 import pytz
+from unittest.mock import MagicMock
 
 baseCase     = datetime(2018,5,5,13,39,12, tzinfo=pytz.utc)
 leapyearCase = datetime(2016,2,29,13,39,12, tzinfo=pytz.utc)
 
-mb = MinuteBucket(baseCase, {})
+class MockTable:
+    def __init__(self):
+        pass
+
+    """ Mocks boto3's dynamodb table. """
+    def put_item(self, **kwargs):
+        return {}
+
+mb = MinuteBucket(baseCase, {"device_id": "foo"})
 assert mb.BucketID() == "2018-05-05T13:39+0000" # UTC
 #assert mb.BucketEndTime() == datetime(2018,5,5,13,39,59, tzinfo=pytz.utc)
 assert mb.NextBucketStart() == datetime(2018,5,5,13,40,0, tzinfo=pytz.utc)
 assert mb.CountInBucket() == 1
 assert type(mb.CountInBucket()) == int
+
+mbMock = MockTable()
+mbMock.put_item = MagicMock()
+mbMock.get_item = MagicMock(return_value={"Items": None})
+mb.GetTable = MagicMock(return_value=mbMock)
+mb.ProcessEvent(chain=False)
+
+mbMock.put_item.assert_called_with({
+    "bucket_id": "2018-05-05T13:39+0000"
+})
 
 hb = HourBucket(baseCase, mb, {})
 assert hb.BucketID() == "2018-05-05T13:00+0000" # UTC
@@ -148,19 +167,3 @@ assert yb.BucketID() == "2017-01-01T00:00-0800" # Local
 assert yb.BucketStartTime() == datetime(2017, 1, 1,8,0,0, tzinfo=pytz.utc)
 assert yb.BucketEndTime()   == datetime(2017,12, 1,8,0,0, tzinfo=pytz.utc)
 
-
-# TODO - add fall back case 
-
-# Override the dynamo table with mock for testing
-BucketRule.GetTable = lambda self, tableName: MockTable(tableName)
-#MockTable.get_item = lambda self,  **kwargs: {} # Should not be a matching row
-
-# mb.ProcessEvent(
-#     { "device_id": "TestEvent",
-#         "bucket_id": baseCase.strftime("%Y-%m-%dT%H:%MZ"),
-#         "current": Decimal('1.1'),
-#         "volts": Decimal('242.0'),
-#         "watt_hours": Decimal('266.2')/60,
-#         "cost_usd": Decimal('266.2')/60*Decimal('0.1326')/Decimal(1000)
-#     }
-# )

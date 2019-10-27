@@ -8,27 +8,16 @@ from typing import List
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
 
-class MockTable:
-    def __init__(self, tableName):
-        self.TableName = tableName
-
-    """ Mocks boto3's dynamodb table. """
-    def get_item(self, **kwargs):
-        return {}
-
-    def put_item(self, **kwargs):
-        print(kwargs)
 
 class BucketRule:
     """ Defines a rule for bucketing by time windows, e.g. minute, day, year """
 
-    """ Func to get a table. Dynamo by default. Can be swapped out for mock table. """
-    def GetTable(self, tableSuffix):
-        return boto3.resource('dynamodb', region_name='us-east-1').Table("EnergyMonitor." + tableSuffix)
+    """ Func to get a table. Dynamo by default. Could be swapped out for a mock table. """
+    def GetTable(self):
+        return boto3.resource('dynamodb', region_name='us-east-1').Table("EnergyMonitor.PowerReadings")
         
     def __init__(self, eventTime: datetime, aggedFrom, values: dict):
-        """ Table is EnergyMonitor.<TableSuffix> """
-        self.TableSuffix = None
+        self.Grain = None
         self.BucketFormat = None
         self.AggedFrom = aggedFrom
         self.AggTo = BucketRule # Callable class to chain for next level aggregation
@@ -73,9 +62,10 @@ class BucketRule:
         return self.AggedFrom.GetRange(childStartBucket, childEndBucket)
     
     def GetRange(self, startBucketID, endBucketID):
-        table = self.GetTable(self.TableSuffix)
+        table = self.GetTable()
+        device_grain = '{0}|{1}'.format(self.Values['device_id'], self.Grain)
         rangeItems = table.query(
-            KeyConditionExpression=Key('device_id').eq(self.Values['device_id']) & Key('bucket_id').between(startBucketID, endBucketID),
+            KeyConditionExpression=Key('device_grain').eq(device_grain) & Key('bucket_id').between(startBucketID, endBucketID),
             ConsistentRead=True
         )
         return rangeItems['Items']
@@ -88,54 +78,35 @@ class BucketRule:
         # - Get all of the rows from the previous bucket that aggregate into this bucket
         # - Aggregate
         # - Save to table
-        item = self.GetItem()
-        insert = False
-        if item is None:
-            # Initialize empty item
-            insert = True
-            item = { 
-                'device_id': self.Values['device_id'],
-                'bucket_id': self.BucketID(),
-                "amps": Decimal(0),
-                "volts": Decimal(0),
-                "watt_hours": Decimal(0),
-                "cost_usd": Decimal(0)
-            }
+        
+        item = { 
+            'device_grain': '{0}|{1}'.format(self.Values['device_id'], self.Grain),
+            'grain': self.Grain,
+            'device_id': self.Values['device_id'],
+            'bucket_id': self.BucketID(),
+            "amps": Decimal(0),
+            "volts": Decimal(0),
+            "watt_hours": Decimal(0),
+            "cost_usd": Decimal(0)
+        }
 
         # Get all of the constituent rows
         childRows = self.GetChildren()
-        if len(childRows) != self.CountInBucket() and self.TableSuffix == "Hour":
-            print("WARN: Bucket {0} {1} has {2} children, expected {3}".format(self.TableSuffix, self.BucketID(), len(childRows), self.CountInBucket()))
+        if len(childRows) != self.CountInBucket() and self.Grain == "Hour":
+            print("WARN: Bucket {0} {1} has {2} children, expected {3}".format(self.Grain, self.BucketID(), len(childRows), self.CountInBucket()))
 
         # Update by averaging or summing 
         # Recompute each one by selecting all of its children
         # Selecting and re-agg'ing is self-healing and better than trying to only incrementally update
-        # FIXME amps and current both until reagg completes
-        # item['amps'] = sum(map(lambda i: i['amps'], childRows)) / self.CountInBucket()
         item['amps'] = sum(map(lambda i: i['amps'] if 'amps' in i else i['current'], childRows)) / self.CountInBucket()
         item['volts'] = sum(map(lambda i: i['volts'], childRows)) / self.CountInBucket()
         item['watt_hours'] = sum(map(lambda i: i['watt_hours'], childRows))
         item['cost_usd'] = sum(map(lambda i: i['cost_usd'], childRows))
 
-        table = self.GetTable(self.TableSuffix)
+        table = self.GetTable()
         results = None
-        if(insert):
-             results = table.put_item(Item=item)
-        else:
-            results = table.update_item(
-                Key={
-                    'device_id': item['device_id'],
-                    'bucket_id': item['bucket_id']
-                },
-                UpdateExpression="set amps=:a, volts=:v, watt_hours=:w, cost_usd=:u",
-                ExpressionAttributeValues={
-                    ':a': item['amps'],
-                    ':v': item['volts'],
-                    ':w': item['watt_hours'],
-                    ':u': item['cost_usd']
-                },
-                ReturnValues="UPDATED_NEW"
-            )
+        # Put will insert or overwrite
+        results = table.put_item(Item=item)
 
         if chain and self.AggTo is not None:
             # Aggregate to the next level
@@ -148,14 +119,14 @@ class BucketRule:
         """ Returns the item from the this bucket table """
         if bucketID == None:
             bucketID = self.BucketID()
-        table = self.GetTable(self.TableSuffix)
+        table = self.GetTable()
         
         response = table.get_item(
             Key={
-                'device_id': self.Values['device_id'],
+                'device_grain': '{0}|{1}'.format(self.Values['device_id'], self.Grain),
                 'bucket_id': bucketID
             },
-            ConsistentRead=True #2018-05-28T00
+            ConsistentRead=True
         )
         if 'Item' in response:
             return response['Item']
@@ -177,7 +148,7 @@ class EndViaDuration():
 class MinuteBucket(EndViaFormatBucket, BucketRule):
     def __init__(self, eventTime: datetime, values: dict=None):
         super().__init__(eventTime, None, values)
-        self.TableSuffix = "Minute"
+        self.Grain = "Minute"
         self.BucketFormat = "%Y-%m-%dT%H:%M%z"
         self.LegacyBucketFormat = "%Y-%m-%dT%H:%MZ"
         self.AggTo = HourBucket
@@ -194,10 +165,10 @@ class MinuteBucket(EndViaFormatBucket, BucketRule):
     def ProcessEvent(self, chain=True, doInsert=True):
         # See if there is an existing item 
         item = self.GetItem()
-        table = self.GetTable(self.TableSuffix)
+        table = self.GetTable()
         if item is not None:
             # should not exist, but noop
-            print("Warning: Found entry for minute {0} / {1}".format(values['device_id'], self.BucketID()))
+            print("Warning: Found entry for minute {0} / {1}".format(self.Values['device_id'], self.BucketID()))
             # For consistency, set Values to the retrieved item
             self.Values = item
         results = None
@@ -215,7 +186,7 @@ class MinuteBucket(EndViaFormatBucket, BucketRule):
 class HourBucket(EndViaFormatBucket, BucketRule):
     def __init__(self, eventTime: datetime, aggedFrom: BucketRule=None, values: dict=None):
         super().__init__(eventTime, aggedFrom, values)
-        self.TableSuffix = "Hour"
+        self.Grain = "Hour"
         self.BucketFormat = "%Y-%m-%dT%H:00%z"
         self.BucketEndFormat = "%Y-%m-%dT%H:59%z"
         self.AggTo = DayBucket
@@ -275,7 +246,7 @@ class LocalBucketRule():
 class DayBucket(LocalBucketRule, EndViaFormatBucket, BucketRule):
     def __init__(self, eventTime: datetime, aggedFrom: BucketRule=None, values: dict=None):
         super().__init__(eventTime, aggedFrom, values)
-        self.TableSuffix = "Day"
+        self.Grain = "Day"
         self.BucketFormat = "%Y-%m-%dT00:00%z"
         self.BucketEndFormat = "%Y-%m-%dT23:00%z"
         self.AggTo = MonthBucket
@@ -310,7 +281,7 @@ class MonthBucket(LocalBucketRule, EndViaDuration, BucketRule):
 class YearBucket(LocalBucketRule, EndViaFormatBucket, BucketRule):
     def __init__(self, eventTime: datetime, aggedFrom: BucketRule=None, values: dict=None):
         super().__init__(eventTime, aggedFrom, values)
-        self.TableSuffix = "Year"
+        self.Grain = "Year"
         self.BucketFormat = "%Y-01-01T00:00%z"
         self.BucketEndFormat = "%Y-12-01T00:00%z"
         self.AggTo = None

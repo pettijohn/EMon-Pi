@@ -89,7 +89,7 @@ while True:
         finally:
             client.disconnect()
     except KeyboardInterrupt:
-        quit
+        quit()
     except:
         timeout = 10
         print("Uncaught exception, restarting in {0} seconds".format(timeout))
